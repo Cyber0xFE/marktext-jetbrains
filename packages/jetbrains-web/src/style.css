@@ -45,10 +45,41 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* Muya 只给代码块横向滚动条声明了尺寸（height/width）而没有 thumb 样式，
+   Chromium（JCEF）下 thumb 实际不可见，长行被截断却看不到滚动条。
+   这里补齐 thumb/track，让超出代码块宽度的行有可见且可拖动的横向滚动条。 */
+.mu-code-block .mu-code::-webkit-scrollbar {
+  display: block;
+  height: 8px;
+  width: 8px;
+  background: transparent;
+}
+
+.mu-code-block .mu-code::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.mu-code-block .mu-code::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.mu-code-block .mu-code::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     background: #2b2d30;
     color: #dfe1e5;
+  }
+
+  .mu-code-block .mu-code::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .mu-code-block .mu-code::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.48);
   }
 }
 
