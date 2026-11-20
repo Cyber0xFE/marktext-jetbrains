@@ -53,6 +53,7 @@ interface HostWindow extends Window {
     setOptions: (options: Partial<IMuyaOptions>) => void
     setWheelSensitivity: (sensitivity: number) => void
     setEditorBackground: (background: { color?: string | null; imageUrl?: string | null }) => void
+    scrollToHeading: (text: string) => void
     focus: () => void
   }
 }
@@ -201,6 +202,17 @@ function loadDocument(payload: DocumentPayload): void {
   }
 }
 
+function scrollToHeading(text: string): void {
+  if (!editor) return
+  const headings = Array.from(editor.domNode.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+  const normalize = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+  const normalized = normalize(text)
+  const exact = headings.find((element) => normalize(element.textContent ?? '') === normalized)
+  const target = exact
+    ?? headings.find((element) => normalize(element.textContent ?? '').includes(normalized))
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 function start(): void {
   document.addEventListener('click', (event) => {
     const target = event.target
@@ -222,6 +234,7 @@ function start(): void {
     setOptions: (options) => editor?.setOptions(options, true),
     setWheelSensitivity: (sensitivity) => smoothWheelScroll?.setSensitivity(sensitivity),
     setEditorBackground: (background) => setEditorBackground(background.color, background.imageUrl),
+    scrollToHeading,
     focus: () => editor?.focus()
   }
 

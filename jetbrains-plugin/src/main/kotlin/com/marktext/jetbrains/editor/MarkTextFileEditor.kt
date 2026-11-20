@@ -3,7 +3,11 @@ package com.marktext.jetbrains.editor
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.ide.structureView.StructureViewBuilder
+import com.intellij.ide.structureView.StructureViewModel
+import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -21,6 +25,7 @@ import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.openapi.wm.ToolWindowManager
 import com.marktext.jetbrains.settings.MarkTextSettings
+import com.marktext.jetbrains.editor.structure.MarkdownStructureViewModel
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -106,6 +111,15 @@ internal class MarkTextFileEditor(
 
     override fun getCurrentLocation(): FileEditorLocation? = null
 
+    override fun getStructureViewBuilder(): StructureViewBuilder? {
+        val target = document ?: return null
+        return object : TreeBasedStructureViewBuilder() {
+            override fun createStructureViewModel(editor: Editor?): StructureViewModel {
+                return MarkdownStructureViewModel(target, file.name, ::scrollWebToHeading)
+            }
+        }
+    }
+
     override fun getState(level: FileEditorStateLevel): FileEditorState = EmptyFileEditorState
 
     override fun dispose() {
@@ -141,6 +155,10 @@ internal class MarkTextFileEditor(
                 project.getService(MarkTextNotificationService::class.java).report(detail)
             }
         }
+    }
+
+    private fun scrollWebToHeading(headingText: String) {
+        if (!disposed) bridge.call("scrollToHeading", gson.toJson(headingText))
     }
 
     private fun sendDocumentToWeb(markdown: String) {
