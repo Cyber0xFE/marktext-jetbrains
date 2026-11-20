@@ -31,6 +31,8 @@ pnpm run build:plugin:fast
 
 `pnpm run build:plugin` runs the same steps and uses the checked-in Gradle wrapper. `pnpm run build:plugin:fast` skips the IntelliJ searchable-options launch, which is useful when that sandbox cannot start in the local environment.
 
+The build then runs `scripts/install-plugin.mjs`, which queues the plugin for every JetBrains IDE on this machine. The queue uses each IDE's own `StartupActionScriptManager` (`<system>/plugins/action.script`, the same mechanism as the IDE's "Install Plugin from Disk"), so running IDEs are queued too and the IDE performs the replacement on its next start. When queuing is not possible the ZIP is unpacked into `<config>/plugins/marktext-jetbrains` directly, which requires the IDE to be closed. Set `MARKTEXT_SKIP_INSTALL=1` to skip this step, or run `pnpm run install:plugin` on its own.
+
 The plugin ZIP is written to `jetbrains-plugin/build/distributions/`.
 
 ### IntelliJ IDEA

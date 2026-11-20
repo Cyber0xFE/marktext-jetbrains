@@ -11,8 +11,9 @@
     "install:deps": "pnpm install",
     "typecheck": "pnpm --filter @muyajs/core build:types && pnpm --filter @marktext/jetbrains-web exec tsc --noEmit",
     "build:web": "pnpm --filter @muyajs/core build:types && pnpm --filter @marktext/jetbrains-web build",
-    "build:plugin": "pnpm run build:web && node scripts/run-gradle.mjs buildPlugin",
-    "build:plugin:fast": "pnpm run build:web && node scripts/run-gradle.mjs buildPlugin -x buildSearchableOptions",
+    "build:plugin": "pnpm run build:web && node scripts/run-gradle.mjs buildPlugin && node scripts/install-plugin.mjs",
+    "build:plugin:fast": "pnpm run build:web && node scripts/run-gradle.mjs buildPlugin -x buildSearchableOptions && node scripts/install-plugin.mjs",
+    "install:plugin": "node scripts/install-plugin.mjs",
     "runIde": "node scripts/run-gradle.mjs runIde"
   }
 }
