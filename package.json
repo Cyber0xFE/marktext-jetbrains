@@ -1,0 +1,18 @@
+{
+  "name": "marktext-jetbrains",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "install:deps": "pnpm install",
+    "typecheck": "pnpm --filter @muyajs/core build:types && pnpm --filter @marktext/jetbrains-web exec tsc --noEmit",
+    "build:web": "pnpm --filter @muyajs/core build:types && pnpm --filter @marktext/jetbrains-web build",
+    "build:plugin": "pnpm run build:web && node scripts/run-gradle.mjs buildPlugin",
+    "build:plugin:fast": "pnpm run build:web && node scripts/run-gradle.mjs buildPlugin -x buildSearchableOptions",
+    "runIde": "node scripts/run-gradle.mjs runIde"
+  }
+}

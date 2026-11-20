@@ -1,0 +1,152 @@
+html,
+body,
+#editor {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #ffffff;
+  color: #202124;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+#editor {
+  overflow: auto;
+}
+
+/* Muya replaces the mount node with `.mu-editor` during initialization. Keep
+   the replaced node as the scrolling surface so the host wheel controller has
+   a stable viewport. */
+.mu-editor {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: transparent;
+}
+
+.muya-starting {
+  box-sizing: border-box;
+  padding: 24px;
+  color: #737780;
+}
+
+.muya-startup-error {
+  box-sizing: border-box;
+  padding: 24px;
+  color: #b42318;
+  font: 13px/1.5 monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #2b2d30;
+    color: #dfe1e5;
+  }
+}
+
+.marktext-image-preview[hidden] {
+  display: none;
+}
+
+.marktext-image-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 10002;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: visible;
+  background: rgba(0, 0, 0, 0.84);
+  color: #f4f4f4;
+  outline: none;
+  box-shadow: none;
+  border-radius: 0;
+  transition: none;
+}
+
+.marktext-image-preview > button,
+.marktext-image-preview-toolbar button {
+  box-sizing: border-box;
+  min-width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.marktext-image-preview > button:hover,
+.marktext-image-preview-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.marktext-image-preview > button:focus-visible,
+.marktext-image-preview-toolbar button:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 2px;
+}
+
+.marktext-image-preview-close {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 1;
+  font-size: 28px !important;
+}
+
+.marktext-image-preview-toolbar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  visibility: hidden;
+  transition: opacity 160ms ease, visibility 0s linear 160ms;
+}
+
+.marktext-image-preview.is-zooming .marktext-image-preview-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.marktext-image-preview-stage {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.marktext-image-preview-stage.is-dragging {
+  cursor: grabbing;
+}
+
+.marktext-image-preview-stage img {
+  display: block;
+  flex: none;
+  max-width: none;
+  max-height: none;
+  user-select: none;
+}

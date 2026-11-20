@@ -1,0 +1,18 @@
+<idea-plugin>
+    <id>com.marktext.jetbrains</id>
+    <name>MarkText Markdown Editor</name>
+    <vendor email="support@marktext.app" url="https://github.com/marktext/marktext">MarkText</vendor>
+    <description><![CDATA[
+        <p>MarkText's Muya WYSIWYG Markdown editor for IntelliJ-based IDEs.</p>
+        <p>This early build provides a JCEF-backed custom editor for Markdown files.</p>
+    ]]></description>
+
+    <idea-version since-build="253" />
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.jcef</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileEditorProvider implementation="com.marktext.jetbrains.editor.MarkTextFileEditorProvider" />
+        <applicationConfigurable instance="com.marktext.jetbrains.settings.MarkTextSettingsConfigurable" />
+    </extensions>
+</idea-plugin>

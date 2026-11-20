@@ -1,0 +1,20 @@
+{
+  "name": "@marktext/jetbrains-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Muya web host used by the MarkText IntelliJ Platform plugin",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@muyajs/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.5"
+  }
+}

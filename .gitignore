@@ -1,0 +1,9 @@
+node_modules/
+packages/*/node_modules/
+packages/muya/lib/
+packages/jetbrains-web/dist/
+jetbrains-plugin/.gradle/
+jetbrains-plugin/.intellijPlatform/
+jetbrains-plugin/.kotlin/
+jetbrains-plugin/build/
+dist/
