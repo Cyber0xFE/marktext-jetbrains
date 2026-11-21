@@ -68,6 +68,34 @@ body {
   background: transparent;
 }
 
+/* Markdown 源码行号：显示在顶层块左侧，随块滚动。行号 span 使用
+   contenteditable="false"，不参与 Muya 的模型选择与复制。 */
+.mu-container > .marktext-line-numbered {
+  position: relative;
+}
+
+.marktext-line-number {
+  position: absolute;
+  top: 0.25em;
+  left: -62px;
+  width: 46px;
+  color: var(--editor-color-30, rgb(0 0 0 / 32%));
+  font-family: var(--mu-default-code-font-family, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+
+  transition: opacity 120ms ease;
+}
+
+/* 悬停标题时 Muya 会在同一侧显示复制链接与折叠按钮，让行号让位避免叠字。 */
+.mu-container > :is(h1, h2, h3, h4, h5, h6):hover > .marktext-line-number {
+  opacity: 0;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     background: #2b2d30;
@@ -80,6 +108,10 @@ body {
 
   .mu-code-block .mu-code::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.48);
+  }
+
+  .marktext-line-number {
+    color: rgb(255 255 255 / 32%);
   }
 }
 

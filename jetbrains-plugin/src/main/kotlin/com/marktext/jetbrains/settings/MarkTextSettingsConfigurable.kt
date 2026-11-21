@@ -21,6 +21,7 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
     private var panel: JComponent? = null
     private var wheelSensitivitySpinner: JSpinner? = null
     private var defaultEditorCheckBox: JCheckBox? = null
+    private var lineNumbersCheckBox: JCheckBox? = null
     private var backgroundColor: Color? = null
     private var backgroundColorButton: JButton? = null
     private var backgroundImageField: JTextField? = null
@@ -47,6 +48,13 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
                 }
             }
             group("Appearance") {
+                row {
+                    checkBox("Show Markdown line numbers")
+                        .applyToComponent { isSelected = settings.showSourceLineNumbers() }
+                        .comment("Show the source line number at the left of each block.")
+                        .component
+                        .also { lineNumbersCheckBox = it }
+                }
                 row("Mouse wheel sensitivity") {
                     spinner(
                         MarkTextSettings.MIN_WHEEL_SENSITIVITY..MarkTextSettings.MAX_WHEEL_SENSITIVITY,
@@ -92,6 +100,7 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
         val settings = MarkTextSettings.get()
         return spinnerValue(spinner) != settings.wheelSensitivity() ||
             defaultEditorCheckBox?.isSelected != settings.useAsDefaultMarkdownEditor() ||
+            lineNumbersCheckBox?.isSelected != settings.showSourceLineNumbers() ||
             selectedBackgroundColor() != settings.editorBackgroundColor() ||
             backgroundImageField?.text?.trim().orEmpty() != settings.editorBackgroundImage().orEmpty()
     }
@@ -103,12 +112,18 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
         defaultEditorCheckBox?.let {
             MarkTextSettings.get().setUseAsDefaultMarkdownEditor(it.isSelected)
         }
+        val showLineNumbers = lineNumbersCheckBox?.isSelected ?: true
+        MarkTextSettings.get().setShowSourceLineNumbers(showLineNumbers)
         MarkTextSettings.get().setEditorBackgroundColor(selectedBackgroundColor())
         MarkTextSettings.get().setEditorBackgroundImage(backgroundImageField?.text)
         ApplicationManager.getApplication()
             .messageBus
             .syncPublisher(MarkTextSettings.TOPIC)
             .wheelSensitivityChanged(value)
+        ApplicationManager.getApplication()
+            .messageBus
+            .syncPublisher(MarkTextSettings.TOPIC)
+            .sourceLineNumbersChanged(showLineNumbers)
         ApplicationManager.getApplication()
             .messageBus
             .syncPublisher(MarkTextSettings.TOPIC)
@@ -121,6 +136,7 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
     override fun reset() {
         wheelSensitivitySpinner?.value = MarkTextSettings.get().wheelSensitivity()
         defaultEditorCheckBox?.isSelected = MarkTextSettings.get().useAsDefaultMarkdownEditor()
+        lineNumbersCheckBox?.isSelected = MarkTextSettings.get().showSourceLineNumbers()
         backgroundColor = MarkTextSettings.get().editorBackgroundColor()?.let(Color::decode)
         updateColorButton()
         backgroundImageField?.text = MarkTextSettings.get().editorBackgroundImage().orEmpty()
@@ -129,6 +145,7 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
     override fun disposeUIResources() {
         wheelSensitivitySpinner = null
         defaultEditorCheckBox = null
+        lineNumbersCheckBox = null
         backgroundColorButton = null
         backgroundImageField = null
         backgroundColor = null

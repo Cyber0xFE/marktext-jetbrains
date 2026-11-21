@@ -14,6 +14,7 @@ class MarkTextSettings : PersistentStateComponent<MarkTextSettings.State> {
     data class State(
         var wheelSensitivity: Double = DEFAULT_WHEEL_SENSITIVITY,
         var useAsDefaultMarkdownEditor: Boolean = true,
+        var showSourceLineNumbers: Boolean = true,
         var editorBackgroundColor: String? = null,
         var editorBackgroundImage: String? = null,
     )
@@ -26,6 +27,7 @@ class MarkTextSettings : PersistentStateComponent<MarkTextSettings.State> {
         this.state = State(
             wheelSensitivity = clampSensitivity(state.wheelSensitivity),
             useAsDefaultMarkdownEditor = state.useAsDefaultMarkdownEditor,
+            showSourceLineNumbers = state.showSourceLineNumbers,
             editorBackgroundColor = normalizeColor(state.editorBackgroundColor),
             editorBackgroundImage = normalizeImagePath(state.editorBackgroundImage),
         )
@@ -41,6 +43,12 @@ class MarkTextSettings : PersistentStateComponent<MarkTextSettings.State> {
 
     fun setUseAsDefaultMarkdownEditor(value: Boolean) {
         state.useAsDefaultMarkdownEditor = value
+    }
+
+    fun showSourceLineNumbers(): Boolean = state.showSourceLineNumbers
+
+    fun setShowSourceLineNumbers(value: Boolean) {
+        state.showSourceLineNumbers = value
     }
 
     fun editorBackgroundColor(): String? = state.editorBackgroundColor
@@ -61,6 +69,8 @@ class MarkTextSettings : PersistentStateComponent<MarkTextSettings.State> {
 
     interface Listener {
         fun wheelSensitivityChanged(value: Double)
+
+        fun sourceLineNumbersChanged(enabled: Boolean)
 
         fun backgroundChanged(color: String?, imageUrl: String?)
     }

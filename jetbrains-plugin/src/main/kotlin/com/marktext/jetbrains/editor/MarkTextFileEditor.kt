@@ -89,6 +89,10 @@ internal class MarkTextFileEditor(
                     if (!disposed) bridge.call("setWheelSensitivity", gson.toJson(value))
                 }
 
+                override fun sourceLineNumbersChanged(enabled: Boolean) {
+                    if (!disposed) bridge.call("setShowLineNumbers", gson.toJson(enabled))
+                }
+
                 override fun backgroundChanged(color: String?, imageUrl: String?) {
                     if (!disposed) {
                         bridge.call("setEditorBackground", gson.toJson(mapOf("color" to color, "imageUrl" to imageUrl)))
@@ -309,6 +313,7 @@ internal class MarkTextFileEditor(
             "editorBackgroundColor" to MarkTextSettings.get().editorBackgroundColor(),
             "editorBackgroundImageUrl" to MarkTextSettings.get().editorBackgroundImageUrl(),
             "readOnly" to readOnly,
+            "showLineNumbers" to MarkTextSettings.get().showSourceLineNumbers(),
             "scrollTop" to scrollPositions.positionOf(file.path),
         )
         bridge.call("loadDocument", gson.toJson(payload))

@@ -21,6 +21,7 @@ import {
 } from '@muyajs/core'
 
 import { ImagePreview } from './imagePreview'
+import { installLineNumbers, type LineNumberController } from './lineNumbers'
 import { installSmoothWheelScroll, type SmoothWheelScrollController } from './smoothWheelScroll'
 import './style.css'
 
@@ -31,6 +32,7 @@ interface DocumentPayload {
   editorBackgroundColor?: string | null
   editorBackgroundImageUrl?: string | null
   readOnly?: boolean
+  showLineNumbers?: boolean
   options?: Partial<IMuyaOptions>
   selection?: TSelectionState | null
   scrollTop?: number
@@ -65,6 +67,7 @@ interface HostWindow extends Window {
     setReadOnly: (readOnly: boolean) => void
     setOptions: (options: Partial<IMuyaOptions>) => void
     setWheelSensitivity: (sensitivity: number) => void
+    setShowLineNumbers: (show: boolean) => void
     setEditorBackground: (background: { color?: string | null; imageUrl?: string | null }) => void
     scrollToHeading: (text: string) => void
     history: (action: 'undo' | 'redo') => void
@@ -77,6 +80,8 @@ let editor: Muya | null = null
 let applyingHostDocument = false
 let imagePreview: ImagePreview | null = null
 let smoothWheelScroll: SmoothWheelScrollController | null = null
+let lineNumbers: LineNumberController | null = null
+let lineNumberRefreshTimer: number | null = null
 let lastReportedScrollTop = -1
 let scrollReportTimer: number | null = null
 let restoringScroll = false
@@ -121,6 +126,12 @@ function destroyEditor(): void {
   imagePreview?.close()
   smoothWheelScroll?.dispose()
   smoothWheelScroll = null
+  lineNumbers?.dispose()
+  lineNumbers = null
+  if (lineNumberRefreshTimer !== null) {
+    window.clearTimeout(lineNumberRefreshTimer)
+    lineNumberRefreshTimer = null
+  }
   if (scrollReportTimer !== null) {
     window.clearTimeout(scrollReportTimer)
     scrollReportTimer = null
@@ -169,6 +180,9 @@ function createEditor(payload: DocumentPayload): void {
     editor = new Muya(container, options)
     editor.init({ focus: payload.readOnly !== true })
     smoothWheelScroll = installSmoothWheelScroll(editor.domNode, payload.wheelSensitivity)
+    lineNumbers = installLineNumbers(editor.domNode)
+    lineNumbers.setVisible(payload.showLineNumbers !== false)
+    lineNumbers.refresh(payload.markdown, editor.options)
     imagePreview ??= new ImagePreview()
     sendMessage({ type: 'status', message: 'Muya initialized' })
     // 打开文件时视口停在顶部，没有 scroll 事件，主动上报一次以完成初始同步。
@@ -185,13 +199,15 @@ function createEditor(payload: DocumentPayload): void {
   editor.on('json-change', () => {
     if (applyingHostDocument || !editor) return
     editor.flush()
+    const markdown = editor.getMarkdown()
     sendMessage({
       type: 'documentChanged',
-      markdown: editor.getMarkdown(),
+      markdown,
       selectedText: editor.getSelectedText(),
       selection: editor.getSelectionState(),
       toc: editor.getTOC()
     })
+    scheduleLineNumberRefresh()
   })
   editor.on('preview-image', ({ data }: { data: string }) => {
     imagePreview?.open(data)
@@ -233,6 +249,9 @@ function loadDocument(payload: DocumentPayload): void {
   } finally {
     applyingHostDocument = false
   }
+
+  if (typeof payload.showLineNumbers === 'boolean') lineNumbers?.setVisible(payload.showLineNumbers)
+  lineNumbers?.refresh(payload.markdown, editor.options)
 
   if (!payload.selection) restoreScrollPosition(payload.scrollTop)
 }
@@ -358,6 +377,22 @@ function restoreScrollPosition(scrollTop: number | undefined): void {
   window.requestAnimationFrame(apply)
 }
 
+const LINE_NUMBER_REFRESH_DELAY_MS = 300
+
+/**
+ * 编辑后重建行号：源码变了行号也会变，且新块没有行号元素。
+ *
+ * 打字时每敲一下都会触发 json-change，用 debounce 合并，避免反复重新解析整篇 markdown。
+ */
+function scheduleLineNumberRefresh(): void {
+  if (lineNumberRefreshTimer !== null) return
+  lineNumberRefreshTimer = window.setTimeout(() => {
+    lineNumberRefreshTimer = null
+    if (!editor || !lineNumbers) return
+    lineNumbers.refresh(editor.getMarkdown(), editor.options)
+  }, LINE_NUMBER_REFRESH_DELAY_MS)
+}
+
 function reportScrollPosition(): void {
   if (!editor || restoringScroll) return
   const scrollTop = currentScrollTop()
@@ -400,6 +435,7 @@ function start(): void {
     setReadOnly: (readOnly) => editor?.setReadOnly(readOnly),
     setOptions: (options) => editor?.setOptions(options, true),
     setWheelSensitivity: (sensitivity) => smoothWheelScroll?.setSensitivity(sensitivity),
+    setShowLineNumbers: (show) => lineNumbers?.setVisible(show),
     setEditorBackground: (background) => setEditorBackground(background.color, background.imageUrl),
     scrollToHeading,
     history: (action: 'undo' | 'redo') => {
