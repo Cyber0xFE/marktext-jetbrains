@@ -269,11 +269,14 @@ class Clipboard {
         return '';
     }
 
-    copy(type: CopyType, info: string) {
+    // Returns whether the native copy command reported success, so callers can surface
+    // feedback (the code-block copy button shows a check on success).
+    copy(type: CopyType, info: string): boolean {
         this.copyType = type;
         this.copyInfo = info;
-        document.execCommand('copy');
+        const ok = document.execCommand('copy');
         this.copyType = CopyType.NORMAL;
+        return ok;
     }
 }
 

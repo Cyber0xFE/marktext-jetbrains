@@ -21,7 +21,6 @@ import {
 } from '@muyajs/core'
 
 import { ImagePreview } from './imagePreview'
-import { installHistoryShortcuts } from './historyShortcuts'
 import { installSmoothWheelScroll, type SmoothWheelScrollController } from './smoothWheelScroll'
 import './style.css'
 
@@ -56,6 +55,7 @@ interface HostWindow extends Window {
     setWheelSensitivity: (sensitivity: number) => void
     setEditorBackground: (background: { color?: string | null; imageUrl?: string | null }) => void
     scrollToHeading: (text: string) => void
+    history: (action: 'undo' | 'redo') => void
     focus: () => void
   }
 }
@@ -146,7 +146,6 @@ function createEditor(payload: DocumentPayload): void {
   try {
     editor = new Muya(container, options)
     editor.init({ focus: payload.readOnly !== true })
-    installHistoryShortcuts(editor, editor.domNode)
     smoothWheelScroll = installSmoothWheelScroll(editor.domNode, payload.wheelSensitivity)
     imagePreview ??= new ImagePreview()
     sendMessage({ type: 'status', message: 'Muya initialized' })
@@ -244,6 +243,10 @@ function start(): void {
     setWheelSensitivity: (sensitivity) => smoothWheelScroll?.setSensitivity(sensitivity),
     setEditorBackground: (background) => setEditorBackground(background.color, background.imageUrl),
     scrollToHeading,
+    history: (action: 'undo' | 'redo') => {
+      if (action === 'redo') editor?.redo()
+      else if (action === 'undo') editor?.undo()
+    },
     focus: () => editor?.focus()
   }
 

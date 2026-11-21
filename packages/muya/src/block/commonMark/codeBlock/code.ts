@@ -124,13 +124,15 @@ class Code extends Parent {
             const button = this.copyButton;
             if (!button)
                 return;
+            const label = this.muya.i18n.t('Copy content');
             const writer = this.muya.options.clipboardWriteText;
             if (!writer) {
-                editor.clipboard.copy(CopyType.COPY_CODE_CONTENT, codeContent.text);
+                const ok = editor.clipboard.copy(CopyType.COPY_CODE_CONTENT, codeContent.text);
+                showCopyFeedback(button, ok, label, this.muya.i18n);
                 return;
             }
             void writer(codeContent.text).catch(() => false).then((ok) => {
-                showCopyFeedback(button, ok, this.muya.i18n.t('Copy content'), this.muya.i18n);
+                showCopyFeedback(button, ok, label, this.muya.i18n);
             });
         };
 

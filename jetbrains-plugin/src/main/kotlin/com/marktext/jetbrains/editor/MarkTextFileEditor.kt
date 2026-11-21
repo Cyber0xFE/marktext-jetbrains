@@ -4,6 +4,11 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CustomShortcutSet
+import com.intellij.openapi.actionSystem.KeyboardShortcut
+import com.intellij.openapi.project.DumbAwareAction
+import com.intellij.openapi.util.Disposer
 import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
@@ -34,7 +39,10 @@ import java.beans.PropertyChangeListener
 import java.io.File
 import java.beans.PropertyChangeSupport
 import java.nio.file.Paths
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import javax.swing.JComponent
+import javax.swing.KeyStroke
 import javax.swing.JPanel
 
 internal class MarkTextFileEditor(
@@ -53,6 +61,7 @@ internal class MarkTextFileEditor(
         add(browser.component, BorderLayout.CENTER)
     }
     private val propertyChanges = PropertyChangeSupport(this)
+    private val historyShortcutsDisposable = Disposer.newDisposable("marktext.history.shortcuts")
     private val userData = UserDataHolderBase()
     private val settingsConnection = ApplicationManager.getApplication().messageBus.connect()
     private var applyingWebDocument = false
@@ -82,6 +91,7 @@ internal class MarkTextFileEditor(
             },
         )
         document?.addDocumentListener(documentListener)
+        registerHistoryShortcuts()
         bridge.load(WebBundle.html(), WebBundle.baseUrl(file.path))
     }
 
@@ -131,8 +141,38 @@ internal class MarkTextFileEditor(
         disposed = true
         settingsConnection.dispose()
         document?.removeDocumentListener(documentListener)
+        Disposer.dispose(historyShortcutsDisposable)
         bridge.dispose()
         browser.dispose()
+    }
+
+    /**
+     * Undo/redo must stay inside Muya. Otherwise the IDE keymap handles Ctrl+Z as a document undo,
+     * which rewrites the buffer; the document listener then pushes the restored text back through
+     * `loadDocument`, rebuilding the whole editor and dropping the caret to the top of the file.
+     *
+     * Component-level custom shortcuts are resolved before the IDE keymap actions (the same
+     * mechanism the platform uses for Cut/Copy/Paste inside JCEF on macOS).
+     */
+    private fun registerHistoryShortcuts() {
+        val ctrl = InputEvent.CTRL_DOWN_MASK
+        registerHistoryShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl), "undo")
+        registerHistoryShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl or InputEvent.SHIFT_DOWN_MASK), "redo")
+        registerHistoryShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Y, ctrl), "redo")
+    }
+
+    private fun registerHistoryShortcut(keyStroke: KeyStroke, action: String) {
+        val historyAction = object : DumbAwareAction() {
+            override fun actionPerformed(event: AnActionEvent) {
+                if (disposed) return
+                bridge.call("history", gson.toJson(action))
+            }
+        }
+        historyAction.registerCustomShortcutSet(
+            CustomShortcutSet(KeyboardShortcut(keyStroke, null)),
+            browser.component,
+            historyShortcutsDisposable,
+        )
     }
 
     private fun handleWebReady() {

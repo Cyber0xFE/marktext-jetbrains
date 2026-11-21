@@ -5,9 +5,13 @@ import { CopyType } from '../../../../clipboard/types';
 import { Muya } from '../../../../muya';
 
 const bootedHosts: HTMLElement[] = [];
+// happy-dom ships no `document.execCommand`; the code-block button's fallback path uses it.
+const execCommand = vi.fn(() => false);
 
 beforeEach(() => {
     window.MUYA_VERSION = 'test';
+    execCommand.mockClear();
+    Object.defineProperty(document, 'execCommand', { configurable: true, writable: true, value: execCommand });
 });
 
 afterEach(() => {
@@ -15,6 +19,7 @@ afterEach(() => {
         const host = bootedHosts.pop()!;
         host.remove();
     }
+    Reflect.deleteProperty(document, 'execCommand');
     vi.restoreAllMocks();
     vi.useRealTimers();
 });
@@ -33,7 +38,7 @@ const THREE_LINE_FENCE = '```js\nconst a = 1\nconst b = 2\nconst c = 3\n```\n';
 describe('code-block copy button', () => {
     it('invokes editor.clipboard.copy(COPY_CODE_CONTENT, codeText) on click', () => {
         const muya = bootMuya(THREE_LINE_FENCE);
-        const copySpy = vi.spyOn(muya.editor.clipboard, 'copy').mockImplementation(() => {});
+        const copySpy = vi.spyOn(muya.editor.clipboard, 'copy').mockReturnValue(true);
 
         const button = muya.domNode.querySelector<HTMLElement>('.mu-code-copy');
         expect(button).not.toBeNull();
@@ -49,13 +54,39 @@ describe('code-block copy button', () => {
 
     it('copies the raw text verbatim for a single-line block', () => {
         const muya = bootMuya('```js\nsolo line\n```\n');
-        const copySpy = vi.spyOn(muya.editor.clipboard, 'copy').mockImplementation(() => {});
+        const copySpy = vi.spyOn(muya.editor.clipboard, 'copy').mockReturnValue(true);
 
         const button = muya.domNode.querySelector<HTMLElement>('.mu-code-copy')!;
         button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
         expect(copySpy).toHaveBeenCalledTimes(1);
         expect(copySpy).toHaveBeenCalledWith(CopyType.COPY_CODE_CONTENT, 'solo line');
+    });
+
+    it('shows a check for two seconds after a successful native copy', async () => {
+        vi.useFakeTimers();
+        execCommand.mockReturnValueOnce(true);
+        const muya = bootMuya(THREE_LINE_FENCE);
+        const button = muya.domNode.querySelector<HTMLButtonElement>('.mu-code-copy')!;
+        button.click();
+
+        expect(execCommand).toHaveBeenCalledWith('copy');
+        expect(button.classList.contains('mu-copy-success')).toBe(true);
+        expect(button.dataset.copyFeedback).toBeUndefined();
+
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(button.classList.contains('mu-copy-success')).toBe(false);
+        expect(button.getAttribute('aria-label')).toBe(muya.i18n.t('Copy content'));
+    });
+
+    it('reports a native copy failure instead of a check', () => {
+        execCommand.mockReturnValueOnce(false);
+        const muya = bootMuya(THREE_LINE_FENCE);
+        const button = muya.domNode.querySelector<HTMLButtonElement>('.mu-code-copy')!;
+        button.click();
+
+        expect(button.classList.contains('mu-copy-success')).toBe(false);
+        expect(button.dataset.copyFeedback).toBe(muya.i18n.t('Copy failed'));
     });
 
     it.each(['false', 'reject'])('restores the accessible label after a %s clipboard failure', async (failure) => {
