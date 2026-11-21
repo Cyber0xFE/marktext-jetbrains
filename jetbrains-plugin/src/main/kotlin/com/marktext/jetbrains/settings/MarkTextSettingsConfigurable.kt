@@ -1,25 +1,24 @@
 package com.marktext.jetbrains.settings
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.options.SearchableConfigurable
+import com.intellij.ui.JBColor
+import com.intellij.ui.dsl.builder.panel
+import com.intellij.util.ui.JBUI
 import java.awt.Color
-import java.awt.BorderLayout
-import java.awt.FlowLayout
-import java.io.File
+import java.awt.Component
+import java.awt.Graphics
+import javax.swing.Icon
 import javax.swing.JButton
-import javax.swing.JComponent
 import javax.swing.JCheckBox
 import javax.swing.JColorChooser
-import javax.swing.JFileChooser
-import javax.swing.JLabel
-import javax.swing.JPanel
+import javax.swing.JComponent
 import javax.swing.JSpinner
-import javax.swing.SpinnerNumberModel
 import javax.swing.JTextField
-import javax.swing.filechooser.FileNameExtensionFilter
 
 class MarkTextSettingsConfigurable : SearchableConfigurable {
-    private var panel: JPanel? = null
+    private var panel: JComponent? = null
     private var wheelSensitivitySpinner: JSpinner? = null
     private var defaultEditorCheckBox: JCheckBox? = null
     private var backgroundColor: Color? = null
@@ -31,74 +30,61 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
     override fun getDisplayName(): String = "MarkText"
 
     override fun createComponent(): JComponent {
-        val spinner = JSpinner(
-            SpinnerNumberModel(
-                MarkTextSettings.DEFAULT_WHEEL_SENSITIVITY,
-                MarkTextSettings.MIN_WHEEL_SENSITIVITY,
-                MarkTextSettings.MAX_WHEEL_SENSITIVITY,
-                0.25,
-            ),
-        )
-        spinner.editor = JSpinner.NumberEditor(spinner, "0.##")
-        wheelSensitivitySpinner = spinner
-        val defaultEditor = JCheckBox("Use MarkText as the default Markdown editor")
-        defaultEditor.isSelected = MarkTextSettings.get().useAsDefaultMarkdownEditor()
-        defaultEditorCheckBox = defaultEditor
-        backgroundColor = MarkTextSettings.get().editorBackgroundColor()?.let(Color::decode)
-        val colorButton = JButton()
-        backgroundColorButton = colorButton
-        updateColorButton()
-        colorButton.addActionListener {
-            val selected = JColorChooser.showDialog(panel, "Editor background color", backgroundColor)
-            if (selected != null) {
-                backgroundColor = Color(selected.red, selected.green, selected.blue)
-                updateColorButton()
-            }
-        }
-        val clearColorButton = JButton("Default")
-        clearColorButton.addActionListener {
-            backgroundColor = null
-            updateColorButton()
-        }
-        val imageField = JTextField(MarkTextSettings.get().editorBackgroundImage().orEmpty(), 24)
-        backgroundImageField = imageField
-        val browseImageButton = JButton("Browse...")
-        browseImageButton.addActionListener {
-            val chooser = JFileChooser().apply {
-                dialogTitle = "Choose editor background image"
-                isAcceptAllFileFilterUsed = false
-                fileFilter = FileNameExtensionFilter("Images", "png", "jpg", "jpeg", "gif", "webp", "bmp")
-                MarkTextSettings.get().editorBackgroundImage()?.let { current -> selectedFile = File(current) }
-            }
-            if (chooser.showOpenDialog(panel) == JFileChooser.APPROVE_OPTION) {
-                imageField.text = chooser.selectedFile.absolutePath
-            }
-        }
-        val clearImageButton = JButton("Clear")
-        clearImageButton.addActionListener { imageField.text = "" }
+        val settings = MarkTextSettings.get()
+        backgroundColor = settings.editorBackgroundColor()?.let(Color::decode)
+        val imageDescriptor = FileChooserDescriptor(true, false, false, false, false, false)
+            .withExtensionFilter("Images", "png", "jpg", "jpeg", "gif", "webp", "bmp")
+            .apply { title = "Choose Editor Background Image" }
 
-        return JPanel(BorderLayout()).also { root ->
-            root.add(JPanel().apply {
-                layout = javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS)
-                add(defaultEditor)
-                add(JPanel(FlowLayout(FlowLayout.LEFT)).also { row ->
-                    row.add(JLabel("Mouse wheel sensitivity:"))
-                    row.add(spinner)
-                })
-                add(JPanel(FlowLayout(FlowLayout.LEFT)).also { row ->
-                    row.add(JLabel("Editor background color:"))
-                    row.add(colorButton)
-                    row.add(clearColorButton)
-                })
-                add(JPanel(FlowLayout(FlowLayout.LEFT)).also { row ->
-                    row.add(JLabel("Editor background image:"))
-                    row.add(imageField)
-                    row.add(browseImageButton)
-                    row.add(clearImageButton)
-                })
-            }, BorderLayout.NORTH)
-            panel = root
+        val root = panel {
+            group("Editor") {
+                row {
+                    checkBox("Use MarkText as the default Markdown editor")
+                        .applyToComponent { isSelected = settings.useAsDefaultMarkdownEditor() }
+                        .comment("Open .md files in the MarkText editor instead of the plain text editor.")
+                        .component
+                        .also { defaultEditorCheckBox = it }
+                }
+            }
+            group("Appearance") {
+                row("Mouse wheel sensitivity") {
+                    spinner(
+                        MarkTextSettings.MIN_WHEEL_SENSITIVITY..MarkTextSettings.MAX_WHEEL_SENSITIVITY,
+                        WHEEL_SENSITIVITY_STEP,
+                    )
+                        .applyToComponent {
+                            editor = JSpinner.NumberEditor(this, "0.##")
+                            value = settings.wheelSensitivity()
+                        }
+                        .comment("Zoom multiplier for the mouse wheel. Default 1, range 0.25 – 4.")
+                        .component
+                        .also { wheelSensitivitySpinner = it }
+                }
+                row("Background color") {
+                    button("Choose...") { chooseBackgroundColor() }
+                        .applyToComponent { backgroundColorButton = this }
+                        .comment("Follows the IDE theme when unset.")
+                    button("Default") {
+                        backgroundColor = null
+                        updateColorButton()
+                    }
+                }
+                row("Background image") {
+                    textFieldWithBrowseButton(imageDescriptor, null) { it.path }
+                        .applyToComponent {
+                            text = settings.editorBackgroundImage().orEmpty()
+                            backgroundImageField = textField
+                        }
+                        .resizableColumn()
+                        .comment("PNG, JPEG, GIF, WebP or BMP.")
+                    button("Clear") { backgroundImageField?.text = "" }
+                }
+            }
         }
+
+        updateColorButton()
+        panel = root
+        return root
     }
 
     override fun isModified(): Boolean {
@@ -156,11 +142,41 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
         "#%02X%02X%02X".format(color.red, color.green, color.blue)
     }
 
+    private fun chooseBackgroundColor() {
+        val selected = JColorChooser.showDialog(panel, "Editor background color", backgroundColor) ?: return
+        backgroundColor = Color(selected.red, selected.green, selected.blue)
+        updateColorButton()
+    }
+
     private fun updateColorButton() {
+        val color = backgroundColor
         backgroundColorButton?.apply {
-            text = backgroundColor?.let { "#%02X%02X%02X".format(it.red, it.green, it.blue) } ?: "Choose..."
-            background = backgroundColor ?: Color(238, 238, 238)
-            isOpaque = true
+            icon = color?.let(::ColorSwatchIcon)
+            toolTipText = color?.let { "Current color: ${colorToHex(it)}" } ?: "No custom background color"
+            revalidate()
+            repaint()
         }
+    }
+
+    private fun colorToHex(color: Color): String =
+        "#%02X%02X%02X".format(color.red, color.green, color.blue)
+
+    private class ColorSwatchIcon(private val color: Color) : Icon {
+        private val size: Int get() = JBUI.scale(14)
+
+        override fun getIconWidth(): Int = size
+
+        override fun getIconHeight(): Int = size
+
+        override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
+            g.setColor(color)
+            g.fillRect(x, y, size - 1, size - 1)
+            g.setColor(JBColor.border())
+            g.drawRect(x, y, size - 1, size - 1)
+        }
+    }
+
+    private companion object {
+        const val WHEEL_SENSITIVITY_STEP = 0.25
     }
 }
