@@ -21,6 +21,7 @@ import {
 } from '@muyajs/core'
 
 import { ImagePreview } from './imagePreview'
+import { installHistoryShortcuts } from './historyShortcuts'
 import { installSmoothWheelScroll, type SmoothWheelScrollController } from './smoothWheelScroll'
 import './style.css'
 
@@ -36,12 +37,13 @@ interface DocumentPayload {
 }
 
 interface HostMessage {
-  type: 'ready' | 'documentChanged' | 'selectionChanged' | 'error' | 'status'
+  type: 'ready' | 'documentChanged' | 'selectionChanged' | 'error' | 'status' | 'openLink'
   markdown?: string
   selectedText?: string
   selection?: TSelectionState | null
   toc?: unknown
   message?: string
+  href?: string
 }
 
 interface HostWindow extends Window {
@@ -87,7 +89,7 @@ function registerPlugins(): void {
   Muya.use(LinkTools, {
     jumpClick: (linkInfo: { href?: string } | null) => {
       const href = linkInfo?.href
-      if (href) window.open(href, '_blank', 'noopener,noreferrer')
+      if (href) sendMessage({ type: 'openLink', href })
     }
   })
   Muya.use(ParagraphFrontButton)
@@ -144,6 +146,7 @@ function createEditor(payload: DocumentPayload): void {
   try {
     editor = new Muya(container, options)
     editor.init({ focus: payload.readOnly !== true })
+    installHistoryShortcuts(editor, editor.domNode)
     smoothWheelScroll = installSmoothWheelScroll(editor.domNode, payload.wheelSensitivity)
     imagePreview ??= new ImagePreview()
     sendMessage({ type: 'status', message: 'Muya initialized' })
@@ -177,6 +180,12 @@ function createEditor(payload: DocumentPayload): void {
       selectedText: editor.getSelectedText(),
       selection: editor.getSelectionState()
     })
+  })
+  editor.on('format-click', (payload: { formatType?: string; data?: { href?: string | null } | string }) => {
+    if (payload?.formatType !== 'link') return
+    const data = payload.data
+    const href = typeof data === 'object' && data !== null ? data.href : null
+    if (href) sendMessage({ type: 'openLink', href })
   })
 
   if (payload.selection) editor.setSelection(payload.selection)

@@ -3,6 +3,7 @@ package com.marktext.jetbrains.editor
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.ide.BrowserUtil
 import com.intellij.ide.structureView.StructureViewBuilder
 import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
@@ -13,12 +14,14 @@ import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorLocation
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.UserDataHolderBase
@@ -28,6 +31,7 @@ import com.marktext.jetbrains.settings.MarkTextSettings
 import com.marktext.jetbrains.editor.structure.MarkdownStructureViewModel
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
+import java.io.File
 import java.beans.PropertyChangeSupport
 import java.nio.file.Paths
 import javax.swing.JComponent
@@ -150,6 +154,10 @@ internal class MarkTextFileEditor(
                 syncPiEditorContext(selectedText)
             }
             "status" -> LOG.info("Web startup: ${message.get("message")?.asString}")
+            "openLink" -> {
+                val href = message.get("href")?.asString ?: return
+                openLink(href)
+            }
             "error" -> {
                 val detail = message.get("message")?.asString ?: "Unknown web editor error"
                 project.getService(MarkTextNotificationService::class.java).report(detail)
@@ -159,6 +167,48 @@ internal class MarkTextFileEditor(
 
     private fun scrollWebToHeading(headingText: String) {
         if (!disposed) bridge.call("scrollToHeading", gson.toJson(headingText))
+    }
+
+    private fun openLink(href: String) {
+        // 页内锚点（#...）暂不支持定位，直接忽略
+        val target = href.substringBefore('#')
+        if (target.isBlank()) return
+
+        val lower = target.lowercase()
+        val isExternalUrl = lower.startsWith("http://")
+            || lower.startsWith("https://")
+            || lower.startsWith("mailto:")
+            || lower.startsWith("ftp://")
+            || lower.startsWith("tel:")
+        if (isExternalUrl) {
+            BrowserUtil.browse(target)
+            return
+        }
+
+        // 相对路径：优先基于当前文件所在目录解析，其次项目根目录
+        val candidates = buildList {
+            val direct = File(target)
+            if (direct.isAbsolute) {
+                add(direct)
+            }
+            else {
+                file.parent?.let { add(File(it.path, target)) }
+                project.basePath?.let { add(File(it, target)) }
+            }
+        }
+        val resolved = candidates.firstOrNull { it.isFile } ?: return
+
+        val virtualFile = VfsUtil.findFileByIoFile(resolved, false) ?: run {
+            LOG.info("Link target not resolvable in IDE: $href")
+            return
+        }
+
+        // JCEF 的 JS query 回调不在 EDT 上，后台线程直接 openFile 会走 runBlockingCancellable 的非
+        // cancellable 分支并报 “There is no ProgressIndicator or Job in this thread”，必须切到 EDT。
+        ApplicationManager.getApplication().invokeLater {
+            if (disposed || !virtualFile.isValid) return@invokeLater
+            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+        }
     }
 
     private fun sendDocumentToWeb(markdown: String) {
