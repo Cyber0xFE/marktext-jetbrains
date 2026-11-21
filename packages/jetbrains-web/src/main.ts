@@ -36,9 +36,11 @@ interface DocumentPayload {
 }
 
 interface HostMessage {
-  type: 'ready' | 'documentChanged' | 'selectionChanged' | 'error' | 'status' | 'openLink'
+  type: 'ready' | 'documentChanged' | 'selectionChanged' | 'viewportHeadingChanged' | 'error' | 'status' | 'openLink'
   markdown?: string
   selectedText?: string
+  headingText?: string
+  headingIndex?: number
   selection?: TSelectionState | null
   toc?: unknown
   message?: string
@@ -106,6 +108,7 @@ function destroyEditor(): void {
   imagePreview?.close()
   smoothWheelScroll?.dispose()
   smoothWheelScroll = null
+  lastReportedKey = ''
   if (!editor) return
   editor.destroy()
   editor = null
@@ -149,6 +152,8 @@ function createEditor(payload: DocumentPayload): void {
     smoothWheelScroll = installSmoothWheelScroll(editor.domNode, payload.wheelSensitivity)
     imagePreview ??= new ImagePreview()
     sendMessage({ type: 'status', message: 'Muya initialized' })
+    // 打开文件时视口停在顶部，没有 scroll 事件，主动上报一次以完成初始同步。
+    scheduleViewportHeadingReport()
   } catch (error) {
     destroyEditor()
     const detail = error instanceof Error ? error.stack ?? error.message : String(error)
@@ -210,18 +215,90 @@ function loadDocument(payload: DocumentPayload): void {
   }
 }
 
+/**
+ * 收集文档顶层的标题元素。
+ *
+ * 标题也可以出现在引用块/列表里，但 markdown 大纲只收录顶层标题，
+ * 所以这里同样过滤掉嵌套容器内的标题，保证两侧标题集合一致，
+ * 否则嵌套标题会抢走同步位置（甚至永远匹配不到）。
+ */
+function topLevelHeadingElements(): HTMLElement[] {
+  if (!editor) return []
+  return Array.from(editor.domNode.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'))
+    .filter((heading) => !heading.closest('.mu-block-quote, .mu-bullet-list, .mu-order-list'))
+}
+
 function scrollToHeading(text: string): void {
-  if (!editor) return
-  const headings = Array.from(editor.domNode.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+  const headings = topLevelHeadingElements()
   const normalize = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
   const normalized = normalize(text)
   const exact = headings.find((element) => normalize(element.textContent ?? '') === normalized)
   const target = exact
     ?? headings.find((element) => normalize(element.textContent ?? '').includes(normalized))
+  // 跳转后保持阅读进度一致，避免结构视图在目标标题与原文之间来回选中
+  if (target) markReported(headings.indexOf(target), (target.textContent ?? '').trim())
   target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+const VIEWPORT_REPORT_INTERVAL_MS = 120
+let viewportReportTimer: number | null = null
+let viewportReportFrame: number | null = null
+let lastReportedKey = ''
+
+function markReported(index: number, text: string): void {
+  lastReportedKey = `${index}:${text}`
+}
+
+/**
+ * 找出当前视口顶部所在的标题：取最后一个顶部已越过激活线的标题。
+ *
+ * 激活线不能紧贴视口上沿（那样要等标题完全滚出去才切换，阅读时会滞后一整屏），
+ * 而是放在视口靠上的位置：取视口高度的 20%（上限 120px），
+ * 这样刚进入视口上部的标题就会成为当前章节。
+ *
+ * 同时返回顶层标题中的索引：两端解析规则差异（inline 语法、setext 等）
+ * 可能导致文本不完全一致，索引可以用作兜底定位。
+ */
+function currentViewportHeading(): { index: number; text: string } {
+  const headings = topLevelHeadingElements()
+  if (!editor || headings.length === 0) return { index: -1, text: '' }
+
+  const rootTop = Math.max(0, editor.domNode.getBoundingClientRect().top)
+  const rootHeight = editor.domNode.clientHeight || window.innerHeight
+  const activationLine = rootTop + Math.min(rootHeight * 0.2, 120)
+  let current: HTMLElement | null = null
+  for (const heading of headings) {
+    if (heading.getBoundingClientRect().top <= activationLine) current = heading
+    else break
+  }
+  if (!current) return { index: -1, text: '' }
+  return { index: headings.indexOf(current), text: (current.textContent ?? '').trim() }
+}
+
+function reportViewportHeading(): void {
+  const { index, text } = currentViewportHeading()
+  if (index < 0 || text === '') return
+  const key = `${index}:${text}`
+  if (key === lastReportedKey) return
+  lastReportedKey = key
+  sendMessage({ type: 'viewportHeadingChanged', headingText: text, headingIndex: index })
+}
+
+/** 滚动事件非常密集，先合并到一帧，再按固定间隔节流后上报。 */
+function scheduleViewportHeadingReport(): void {
+  if (viewportReportFrame !== null || viewportReportTimer !== null) return
+  viewportReportFrame = window.requestAnimationFrame(() => {
+    viewportReportFrame = null
+    viewportReportTimer = window.setTimeout(() => {
+      viewportReportTimer = null
+      reportViewportHeading()
+    }, VIEWPORT_REPORT_INTERVAL_MS)
+  })
+}
+
 function start(): void {
+  // scroll 事件不冒泡，所以用捕获阶段统一监听所有滚动容器（Muya 内部滚动容器可能变化）。
+  document.addEventListener('scroll', () => scheduleViewportHeadingReport(), { capture: true, passive: true })
   document.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof Element)) return

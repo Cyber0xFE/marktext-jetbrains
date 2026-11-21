@@ -10,6 +10,7 @@ import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.util.Disposer
 import com.intellij.ide.structureView.StructureViewBuilder
+import com.intellij.ide.structureView.StructureViewFactoryEx
 import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.openapi.editor.Document
@@ -66,6 +67,8 @@ internal class MarkTextFileEditor(
     private val settingsConnection = ApplicationManager.getApplication().messageBus.connect()
     private var applyingWebDocument = false
     private var disposed = false
+    @Volatile
+    private var structureModel: MarkdownStructureViewModel? = null
 
     private val documentListener = object : DocumentListener {
         override fun documentChanged(event: DocumentEvent) {
@@ -129,7 +132,9 @@ internal class MarkTextFileEditor(
         val target = document ?: return null
         return object : TreeBasedStructureViewBuilder() {
             override fun createStructureViewModel(editor: Editor?): StructureViewModel {
-                return MarkdownStructureViewModel(target, file.name, ::scrollWebToHeading)
+                return MarkdownStructureViewModel(target, file.name, ::scrollWebToHeading).also {
+                    structureModel = it
+                }
             }
         }
     }
@@ -193,6 +198,11 @@ internal class MarkTextFileEditor(
                 val selectedText = message.get("selectedText")?.asString.orEmpty()
                 syncPiEditorContext(selectedText)
             }
+            "viewportHeadingChanged" -> {
+                val headingText = message.get("headingText")?.asString ?: return
+                val headingIndex = message.get("headingIndex")?.asInt ?: -1
+                syncStructureViewToHeading(headingText, headingIndex)
+            }
             "status" -> LOG.info("Web startup: ${message.get("message")?.asString}")
             "openLink" -> {
                 val href = message.get("href")?.asString ?: return
@@ -207,6 +217,27 @@ internal class MarkTextFileEditor(
 
     private fun scrollWebToHeading(headingText: String) {
         if (!disposed) bridge.call("scrollToHeading", gson.toJson(headingText))
+    }
+
+    /**
+     * web 端滚动上报视口顶部标题后，把 Structure 视图选中到对应标题。
+     *
+     * 这里直接调用 [StructureViewFactoryEx.getStructureViewWrapper] 的 selectCurrentElement，
+     * 而不是依赖 "Autoscroll from Source" 开关（该开关默认关闭，而 JCEF 编辑器没有
+     * 原生 caret 可供平台轮询，不主动选中则永远看不到同步效果）。
+     */
+    private fun syncStructureViewToHeading(headingText: String, headingIndex: Int) {
+        ApplicationManager.getApplication().invokeLater {
+            if (disposed) return@invokeLater
+            structureModel?.onViewportHeadingChanged(headingText, headingIndex)
+            runCatching {
+                StructureViewFactoryEx.getInstanceEx(project)
+                    .structureViewWrapper
+                    ?.selectCurrentElement(this, file, false)
+            }.onFailure { error ->
+                LOG.debug("Could not sync the structure view to '$headingText'", error)
+            }
+        }
     }
 
     private fun openLink(href: String) {

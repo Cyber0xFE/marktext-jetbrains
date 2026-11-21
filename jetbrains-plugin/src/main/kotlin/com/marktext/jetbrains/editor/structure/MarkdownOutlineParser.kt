@@ -19,6 +19,14 @@ internal object MarkdownOutlineParser {
     private val setextRegex = Regex("""^ {0,3}(=+|-+)[ \t]*$""")
     private val fenceRegex = Regex("""^ {0,3}(`{3,}|~{3,})""")
 
+    /**
+     * 归一化标题文本：折叠空白并忽略大小写，用于在 Java 解析结果与 Muya 渲染文本
+     * 之间做跨实现的匹配。
+     */
+    fun normalize(text: String): String =
+        text.trim().replace(Regex("""\s+"""), " ").lowercase()
+
+
     fun parse(text: String): List<MarkdownHeading> {
         val headings = ArrayList<MarkdownHeading>()
         val lines = text.split('\n')
