@@ -33,6 +33,7 @@ import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.openapi.wm.ToolWindowManager
+import com.marktext.jetbrains.settings.MarkTextScrollPositions
 import com.marktext.jetbrains.settings.MarkTextSettings
 import com.marktext.jetbrains.editor.structure.MarkdownStructureViewModel
 import java.awt.BorderLayout
@@ -56,6 +57,7 @@ internal class MarkTextFileEditor(
         const val EDITOR_NAME = "MarkText"
     }
     private val documentManager = FileDocumentManager.getInstance()
+    private val scrollPositions = MarkTextScrollPositions.getInstance(project)
     private val document: Document? = documentManager.getDocument(file)
     private val browser = JBCefBrowser()
     private val bridge = JcefHostBridge(browser, ::handleHostMessage, ::handleWebReady)
@@ -205,6 +207,14 @@ internal class MarkTextFileEditor(
                 val selectedText = message.get("selectedText")?.asString.orEmpty()
                 syncPiEditorContext(selectedText)
             }
+            "scrollPositionChanged" -> {
+                val scrollTop = message.get("scrollTop")?.asInt ?: return
+                // 回调来自 JCEF 线程，PropertiesComponent 需要在 EDT 上写入；
+                // 这里不检查 disposed，编辑器刚关闭时最后一条位置也应当被记住。
+                ApplicationManager.getApplication().invokeLater {
+                    if (!project.isDisposed) scrollPositions.remember(file.path, scrollTop)
+                }
+            }
             "viewportHeadingChanged" -> {
                 val headingText = message.get("headingText")?.asString ?: return
                 val headingIndex = message.get("headingIndex")?.asInt ?: -1
@@ -299,6 +309,7 @@ internal class MarkTextFileEditor(
             "editorBackgroundColor" to MarkTextSettings.get().editorBackgroundColor(),
             "editorBackgroundImageUrl" to MarkTextSettings.get().editorBackgroundImageUrl(),
             "readOnly" to readOnly,
+            "scrollTop" to scrollPositions.positionOf(file.path),
         )
         bridge.call("loadDocument", gson.toJson(payload))
     }

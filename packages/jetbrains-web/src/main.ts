@@ -33,14 +33,24 @@ interface DocumentPayload {
   readOnly?: boolean
   options?: Partial<IMuyaOptions>
   selection?: TSelectionState | null
+  scrollTop?: number
 }
 
 interface HostMessage {
-  type: 'ready' | 'documentChanged' | 'selectionChanged' | 'viewportHeadingChanged' | 'error' | 'status' | 'openLink'
+  type:
+    | 'ready'
+    | 'documentChanged'
+    | 'selectionChanged'
+    | 'scrollPositionChanged'
+    | 'viewportHeadingChanged'
+    | 'error'
+    | 'status'
+    | 'openLink'
   markdown?: string
   selectedText?: string
   headingText?: string
   headingIndex?: number
+  scrollTop?: number
   selection?: TSelectionState | null
   toc?: unknown
   message?: string
@@ -67,6 +77,9 @@ let editor: Muya | null = null
 let applyingHostDocument = false
 let imagePreview: ImagePreview | null = null
 let smoothWheelScroll: SmoothWheelScrollController | null = null
+let lastReportedScrollTop = -1
+let scrollReportTimer: number | null = null
+let restoringScroll = false
 
 function sendMessage(message: HostMessage): void {
   const serialized = JSON.stringify(message)
@@ -108,6 +121,12 @@ function destroyEditor(): void {
   imagePreview?.close()
   smoothWheelScroll?.dispose()
   smoothWheelScroll = null
+  if (scrollReportTimer !== null) {
+    window.clearTimeout(scrollReportTimer)
+    scrollReportTimer = null
+  }
+  lastReportedScrollTop = -1
+  restoringScroll = false
   lastReportedKey = ''
   if (!editor) return
   editor.destroy()
@@ -193,6 +212,7 @@ function createEditor(payload: DocumentPayload): void {
   })
 
   if (payload.selection) editor.setSelection(payload.selection)
+  else restoreScrollPosition(payload.scrollTop)
 }
 
 function loadDocument(payload: DocumentPayload): void {
@@ -213,6 +233,8 @@ function loadDocument(payload: DocumentPayload): void {
   } finally {
     applyingHostDocument = false
   }
+
+  if (!payload.selection) restoreScrollPosition(payload.scrollTop)
 }
 
 /**
@@ -241,6 +263,7 @@ function scrollToHeading(text: string): void {
 }
 
 const VIEWPORT_REPORT_INTERVAL_MS = 120
+const SCROLL_REPORT_INTERVAL_MS = 250
 let viewportReportTimer: number | null = null
 let viewportReportFrame: number | null = null
 let lastReportedKey = ''
@@ -296,9 +319,68 @@ function scheduleViewportHeadingReport(): void {
   })
 }
 
+/** 浏览器位置按像素保存：滚动容器就是 Muya 替换出来的 `.mu-editor` 节点。 */
+function currentScrollTop(): number {
+  if (!editor) return 0
+  return Math.max(0, Math.round(editor.domNode.scrollTop))
+}
+
+/**
+ * 恢复上次关闭文件时的滚动位置。
+ *
+ * `setContent` 会重建 DOM 并把视口拉回顶部，且 `.mu-editor` 的最终高度要等下一帧才稳定，
+ * 所以放到帧回调里再设置；恢复期间抑制上报，避免把恢复动作当成新的浏览位置。
+ */
+function restoreScrollPosition(scrollTop: number | undefined): void {
+  if (!editor || typeof scrollTop !== 'number' || !Number.isFinite(scrollTop) || scrollTop <= 0) return
+  const container = editor.domNode
+  const target = Math.round(scrollTop)
+  let attempts = 0
+  restoringScroll = true
+
+  const apply = (): void => {
+    if (!editor) {
+      restoringScroll = false
+      return
+    }
+    const limit = Math.max(0, container.scrollHeight - container.clientHeight)
+    container.scrollTop = Math.min(target, limit)
+    // 图片、字体等还没把高度撑到目标位置时，下一帧再试一次。
+    if (container.scrollTop < target && attempts < 3) {
+      attempts += 1
+      window.setTimeout(apply, 150)
+      return
+    }
+    lastReportedScrollTop = Math.round(container.scrollTop)
+    restoringScroll = false
+  }
+
+  window.requestAnimationFrame(apply)
+}
+
+function reportScrollPosition(): void {
+  if (!editor || restoringScroll) return
+  const scrollTop = currentScrollTop()
+  if (scrollTop === lastReportedScrollTop) return
+  lastReportedScrollTop = scrollTop
+  sendMessage({ type: 'scrollPositionChanged', scrollTop })
+}
+
+/** 滚动停下后再上报，避免滚动过程中频繁写回 IDE。 */
+function scheduleScrollPositionReport(): void {
+  if (scrollReportTimer !== null) return
+  scrollReportTimer = window.setTimeout(() => {
+    scrollReportTimer = null
+    reportScrollPosition()
+  }, SCROLL_REPORT_INTERVAL_MS)
+}
+
 function start(): void {
   // scroll 事件不冒泡，所以用捕获阶段统一监听所有滚动容器（Muya 内部滚动容器可能变化）。
-  document.addEventListener('scroll', () => scheduleViewportHeadingReport(), { capture: true, passive: true })
+  document.addEventListener('scroll', () => {
+    scheduleViewportHeadingReport()
+    scheduleScrollPositionReport()
+  }, { capture: true, passive: true })
   document.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof Element)) return
