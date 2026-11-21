@@ -53,6 +53,7 @@ internal class MarkTextFileEditor(
     private val gson = Gson()
     private companion object {
         val LOG = Logger.getInstance(MarkTextFileEditor::class.java)
+        const val EDITOR_NAME = "MarkText"
     }
     private val documentManager = FileDocumentManager.getInstance()
     private val document: Document? = documentManager.getDocument(file)
@@ -108,7 +109,13 @@ internal class MarkTextFileEditor(
 
     override fun getPreferredFocusedComponent(): JComponent = browser.component
 
-    override fun getName(): String = file.name
+    /**
+     * 编辑器名称。
+     *
+     * 平台在展示“当前文件用的是哪个编辑器”时（例如文件有多个编辑器时的切换条）取的就是这个名称；
+     * 标签页标题由 `EditorTabPresentationUtil` 依据文件名生成，不受这里影响。
+     */
+    override fun getName(): String = EDITOR_NAME
 
     override fun getFile(): VirtualFile = file
 

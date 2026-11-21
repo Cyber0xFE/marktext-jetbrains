@@ -29,7 +29,9 @@ On Windows, run `gradlew.bat buildPlugin`.
 
 The Gradle build copies `packages/jetbrains-web/dist` into the plugin resources
 before preparing the sandbox. The current prototype targets IntelliJ Platform
-2025.3.1 and keeps the built-in Markdown editor visible as a fallback.
+2025.3.1 and keeps the built-in Markdown editor available as a parallel editor,
+so a Markdown file can be switched between the built-in one and Muya; the
+switcher lists Muya as `MarkText` (see `MarkTextFileEditor.getName()`).
 
 The editor bridge currently covers document loading, Muya-to-IntelliJ document
 updates, IntelliJ-to-Muya reloads, and JCEF lifecycle cleanup. Image persistence,
