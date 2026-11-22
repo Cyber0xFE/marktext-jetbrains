@@ -22,6 +22,7 @@ import {
 
 import { ImagePreview } from './imagePreview'
 import { installLineNumbers, type LineNumberController } from './lineNumbers'
+import { installSearchBridge, type SearchBridge } from './search'
 import { installSmoothWheelScroll, type SmoothWheelScrollController } from './smoothWheelScroll'
 import './style.css'
 
@@ -47,6 +48,7 @@ interface HostMessage {
     | 'viewportHeadingChanged'
     | 'error'
     | 'status'
+    | 'searchResults'
     | 'openLink'
   markdown?: string
   selectedText?: string
@@ -55,6 +57,8 @@ interface HostMessage {
   scrollTop?: number
   selection?: TSelectionState | null
   toc?: unknown
+  total?: number
+  index?: number
   message?: string
   href?: string
 }
@@ -71,6 +75,10 @@ interface HostWindow extends Window {
     setEditorBackground: (background: { color?: string | null; imageUrl?: string | null }) => void
     scrollToHeading: (text: string) => void
     history: (action: 'undo' | 'redo') => void
+    search: (request: { query?: string; caseSensitive?: boolean; wholeWord?: boolean; regexp?: boolean }) => void
+    findNext: () => void
+    findPrevious: () => void
+    clearSearch: () => void
     focus: () => void
   }
 }
@@ -81,6 +89,7 @@ let applyingHostDocument = false
 let imagePreview: ImagePreview | null = null
 let smoothWheelScroll: SmoothWheelScrollController | null = null
 let lineNumbers: LineNumberController | null = null
+let searchBridge: SearchBridge | null = null
 let lineNumberRefreshTimer: number | null = null
 let lastReportedScrollTop = -1
 let scrollReportTimer: number | null = null
@@ -128,6 +137,8 @@ function destroyEditor(): void {
   smoothWheelScroll = null
   lineNumbers?.dispose()
   lineNumbers = null
+  searchBridge?.dispose()
+  searchBridge = null
   if (lineNumberRefreshTimer !== null) {
     window.clearTimeout(lineNumberRefreshTimer)
     lineNumberRefreshTimer = null
@@ -183,6 +194,7 @@ function createEditor(payload: DocumentPayload): void {
     lineNumbers = installLineNumbers(editor.domNode)
     lineNumbers.setVisible(payload.showLineNumbers === true)
     lineNumbers.refresh(payload.markdown, editor.options)
+    searchBridge = installSearchBridge(editor, (total, index) => sendMessage({ type: 'searchResults', total, index }))
     imagePreview ??= new ImagePreview()
     sendMessage({ type: 'status', message: 'Muya initialized' })
     // 打开文件时视口停在顶部，没有 scroll 事件，主动上报一次以完成初始同步。
@@ -442,6 +454,10 @@ function start(): void {
       if (action === 'redo') editor?.redo()
       else if (action === 'undo') editor?.undo()
     },
+    search: (request) => searchBridge?.search(request),
+    findNext: () => searchBridge?.findNext(),
+    findPrevious: () => searchBridge?.findPrevious(),
+    clearSearch: () => searchBridge?.clear(),
     focus: () => editor?.focus()
   }
 

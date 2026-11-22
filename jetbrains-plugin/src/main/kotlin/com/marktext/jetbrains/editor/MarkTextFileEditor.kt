@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.ide.BrowserUtil
+import com.intellij.find.FindModel
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CustomShortcutSet
 import com.intellij.openapi.actionSystem.DataProvider
@@ -109,6 +110,12 @@ internal class MarkTextFileEditor(
     private var selectedText: String = ""
     @Volatile
     private var lastSyncedSelection: TextRange? = null
+    private var lastSearchSignature: String? = null
+
+    /** 使用 IDE 内置查找栏（与文本编辑器的 Ctrl+F 是同一个组件）。 */
+    private val findSession: MarkTextFindSession by lazy {
+        MarkTextFindSession(project, browser.component, ::searchInWeb, ::navigateWeb, ::closeFind)
+    }
 
     private val documentListener = object : DocumentListener {
         override fun documentChanged(event: DocumentEvent) {
@@ -214,34 +221,106 @@ internal class MarkTextFileEditor(
      */
     private fun registerHistoryShortcuts() {
         val ctrl = InputEvent.CTRL_DOWN_MASK
-        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl), "undo")
-        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl or InputEvent.SHIFT_DOWN_MASK), "redo")
-        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Y, ctrl), "redo")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl)) {
+            bridge.call("history", gson.toJson("undo"))
+        }
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl or InputEvent.SHIFT_DOWN_MASK)) {
+            bridge.call("history", gson.toJson("redo"))
+        }
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Y, ctrl)) {
+            bridge.call("history", gson.toJson("redo"))
+        }
     }
 
     /**
      * Ctrl+F / F3 / Shift+F3 与 IDE keymap 的 Find 系列动作冲突，必须像 undo/redo 一样
-     * 在组件级抢先注册，否则 IDE 会打开针对影子 Editor 的 Find 弹窗。
+     * 在组件级抢先注册，否则 IDE 会打开针对影子 Editor 的原生查找窗口。
+     *
+     * 查找栏本身仍用 IDE 内置的 `SearchReplaceComponent`，所以外观、选项按钮与快捷键
+     * 与文本编辑器的 Ctrl+F 完全一致，只是搜索由 Muya 执行、高亮画在渲染视图里。
      */
     private fun registerSearchShortcuts() {
         val ctrl = InputEvent.CTRL_DOWN_MASK
-        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F, ctrl), "openSearch")
-        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), "findNext")
-        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK), "findPrevious")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F, ctrl)) {
+            openFind()
+        }
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0)) {
+            if (findSession.isOpened) findSession.searchForward()
+        }
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK)) {
+            if (findSession.isOpened) findSession.searchBackward()
+        }
     }
 
-    private fun registerComponentShortcut(keyStroke: KeyStroke, functionName: String) {
-        val action = object : DumbAwareAction() {
+    private fun registerComponentShortcut(keyStroke: KeyStroke, action: () -> Unit) {
+        val shortcutAction = object : DumbAwareAction() {
             override fun actionPerformed(event: AnActionEvent) {
                 if (disposed) return
-                bridge.call(functionName, "null")
+                action()
             }
         }
-        action.registerCustomShortcutSet(
+        shortcutAction.registerCustomShortcutSet(
             CustomShortcutSet(KeyboardShortcut(keyStroke, null)),
             browser.component,
             componentShortcutsDisposable,
         )
+    }
+
+    /**
+     * 打开 IDE 内置查找栏。
+     *
+     * 有选中文本时预填（单行输入框不接受换行），否则复用上一次的查询。
+     */
+    private fun openFind() {
+        val selection = selectedText.trim()
+        if (selection.isNotEmpty() && !selection.contains('\n')) {
+            findSession.model.stringToFind = selection
+        }
+        val view = findSession.searchComponent
+        if (view.parent == null) {
+            panel.add(view, BorderLayout.NORTH)
+        }
+        // 关闭时 Web 端高亮已清除，重新打开必须重新检索。
+        lastSearchSignature = null
+        findSession.open()
+        panel.revalidate()
+        panel.repaint()
+    }
+
+    private fun closeFind() {
+        findSession.hide()
+        lastSearchSignature = null
+        if (disposed) return
+        bridge.call("clearSearch", "null")
+        bridge.call("focus", "null")
+        panel.revalidate()
+        panel.repaint()
+    }
+
+    /** 把 FindModel 的检索条件交给 Muya；相同条件不重复扫描文档。 */
+    private fun searchInWeb(model: FindModel) {
+        if (disposed) return
+        val signature = buildString {
+            append(model.stringToFind.orEmpty()).append('\u0000')
+            append(model.isCaseSensitive).append('\u0000')
+            append(model.isWholeWordsOnly).append('\u0000')
+            append(model.isRegularExpressions)
+        }
+        if (signature == lastSearchSignature) return
+        lastSearchSignature = signature
+        val payload = mapOf(
+            "query" to model.stringToFind.orEmpty(),
+            "caseSensitive" to model.isCaseSensitive,
+            "wholeWord" to model.isWholeWordsOnly,
+            "regexp" to model.isRegularExpressions,
+        )
+        bridge.call("search", gson.toJson(payload))
+    }
+
+    private fun navigateWeb(forward: Boolean) {
+        if (disposed) return
+        LOG.info("MarkText find: navigate forward=$forward")
+        bridge.call(if (forward) "findNext" else "findPrevious", "null")
     }
 
     private fun handleWebReady() {
@@ -280,6 +359,13 @@ internal class MarkTextFileEditor(
                 val headingText = message.get("headingText")?.asString ?: return
                 val headingIndex = message.get("headingIndex")?.asInt ?: -1
                 syncStructureViewToHeading(headingText, headingIndex)
+            }
+            "searchResults" -> {
+                val total = message.get("total")?.asInt ?: 0
+                val index = message.get("index")?.asInt ?: -1
+                ApplicationManager.getApplication().invokeLater {
+                    if (!disposed) findSession.updateResults(total, index)
+                }
             }
             "status" -> LOG.info("Web startup: ${message.get("message")?.asString}")
             "openLink" -> {
