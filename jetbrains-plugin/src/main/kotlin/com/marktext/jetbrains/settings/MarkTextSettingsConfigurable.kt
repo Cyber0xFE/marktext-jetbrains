@@ -112,7 +112,7 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
         defaultEditorCheckBox?.let {
             MarkTextSettings.get().setUseAsDefaultMarkdownEditor(it.isSelected)
         }
-        val showLineNumbers = lineNumbersCheckBox?.isSelected ?: true
+        val showLineNumbers = lineNumbersCheckBox?.isSelected ?: false
         MarkTextSettings.get().setShowSourceLineNumbers(showLineNumbers)
         MarkTextSettings.get().setEditorBackgroundColor(selectedBackgroundColor())
         MarkTextSettings.get().setEditorBackgroundImage(backgroundImageField?.text)

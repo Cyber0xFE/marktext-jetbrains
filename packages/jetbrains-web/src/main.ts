@@ -181,7 +181,7 @@ function createEditor(payload: DocumentPayload): void {
     editor.init({ focus: payload.readOnly !== true })
     smoothWheelScroll = installSmoothWheelScroll(editor.domNode, payload.wheelSensitivity)
     lineNumbers = installLineNumbers(editor.domNode)
-    lineNumbers.setVisible(payload.showLineNumbers !== false)
+    lineNumbers.setVisible(payload.showLineNumbers === true)
     lineNumbers.refresh(payload.markdown, editor.options)
     imagePreview ??= new ImagePreview()
     sendMessage({ type: 'status', message: 'Muya initialized' })

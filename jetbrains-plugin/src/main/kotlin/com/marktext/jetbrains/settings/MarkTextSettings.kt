@@ -14,7 +14,7 @@ class MarkTextSettings : PersistentStateComponent<MarkTextSettings.State> {
     data class State(
         var wheelSensitivity: Double = DEFAULT_WHEEL_SENSITIVITY,
         var useAsDefaultMarkdownEditor: Boolean = true,
-        var showSourceLineNumbers: Boolean = true,
+        var showSourceLineNumbers: Boolean = false,
         var editorBackgroundColor: String? = null,
         var editorBackgroundImage: String? = null,
     )
