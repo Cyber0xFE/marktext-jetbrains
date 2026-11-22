@@ -6,6 +6,24 @@
 
 项目包含 JetBrains 插件、内嵌的 Web 宿主，以及 Web 宿主使用的 Muya 编辑器引擎源码。
 
+## 截图
+
+### 带结构视图的编辑器
+
+![在 Muya 编辑器中打开 README，左侧为 Markdown 结构视图](docs/screenshots/editor.png)
+
+### 源码行号
+
+![渲染表格旁的 Markdown 源码行号](docs/screenshots/line-numbers.png)
+
+### 大纲导航
+
+![列出文档各级标题的大纲导航弹窗](docs/screenshots/outline-navigation.png)
+
+### 图片预览
+
+![从 Markdown 图片打开的图片预览](docs/screenshots/image-preview.png)
+
 ## 致谢
 
 感谢 [MarkText 项目](https://github.com/marktext/marktext)及其贡献者创建并持续维护 MarkText 和 Muya 编辑器引擎，本插件的编辑体验建立在这些成果之上。本项目是独立的社区插件项目，并非 MarkText 官方项目。

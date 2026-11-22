@@ -6,6 +6,24 @@ This project is based on [MarkText](https://github.com/marktext/marktext), the o
 
 The project contains the plugin, its bundled Web host, and the Muya engine source used by that host.
 
+## Screenshots
+
+### Editor with structure view
+
+![README opened in the Muya editor with the Markdown structure view](docs/screenshots/editor.png)
+
+### Source line numbers
+
+![Markdown source line numbers next to a rendered table](docs/screenshots/line-numbers.png)
+
+### Outline navigation
+
+![Outline navigation popup listing the document headings](docs/screenshots/outline-navigation.png)
+
+### Image preview
+
+![Image preview opened from a Markdown image](docs/screenshots/image-preview.png)
+
 ## Acknowledgements
 
 Thanks to the [MarkText project](https://github.com/marktext/marktext) and its contributors for creating and maintaining MarkText and the Muya editor engine that this plugin builds upon. This is an independent community plugin project and is not an official MarkText project.
