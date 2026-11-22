@@ -190,7 +190,7 @@ function createEditor(payload: DocumentPayload): void {
   } catch (error) {
     destroyEditor()
     const detail = error instanceof Error ? error.stack ?? error.message : String(error)
-    container.textContent = `MarkText could not initialize: ${detail}`
+    container.textContent = `Muya could not initialize: ${detail}`
     container.classList.add('muya-startup-error')
     sendMessage({ type: 'error', message: detail })
     return
@@ -446,7 +446,7 @@ function start(): void {
   }
 
   sendMessage({ type: 'status', message: 'Web bundle started' })
-  createEditor({ markdown: '# MarkText', readOnly: true })
+  createEditor({ markdown: '# Muya', readOnly: true })
   sendMessage({ type: 'ready' })
 }
 

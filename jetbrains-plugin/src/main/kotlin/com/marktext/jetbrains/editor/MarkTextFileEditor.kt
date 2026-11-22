@@ -54,7 +54,7 @@ internal class MarkTextFileEditor(
     private val gson = Gson()
     private companion object {
         val LOG = Logger.getInstance(MarkTextFileEditor::class.java)
-        const val EDITOR_NAME = "MarkText"
+        const val EDITOR_NAME = "Muya Markdown Editor"
     }
     private val documentManager = FileDocumentManager.getInstance()
     private val scrollPositions = MarkTextScrollPositions.getInstance(project)
