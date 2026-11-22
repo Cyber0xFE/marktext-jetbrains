@@ -17,6 +17,7 @@ import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -29,6 +30,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiManager
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.Key
@@ -48,6 +50,7 @@ import java.awt.event.KeyEvent
 import javax.swing.JComponent
 import javax.swing.KeyStroke
 import javax.swing.JPanel
+import kotlin.math.abs
 
 internal class MarkTextFileEditor(
     private val project: Project,
@@ -61,11 +64,33 @@ internal class MarkTextFileEditor(
     private val documentManager = FileDocumentManager.getInstance()
     private val scrollPositions = MarkTextScrollPositions.getInstance(project)
     private val document: Document? = documentManager.getDocument(file)
+
+    /**
+     * 供平台和第三方插件读取选中内容的真实 [Editor]。
+     *
+     * JCEF 中的 Muya 没有原生 Editor，而 AI 编程插件（Qoder、Copilot 等）通常通过
+     * [Editor] 的 SelectionModel 与 SelectionEvent 获取选中文本，因此这里创建一个无 UI 的
+     * Editor：它和 Muya 共用同一个 [Document]，把 Muya 的选区同步进去即可让这些插件
+     * 拿到正确的文件、行号和选中文本。
+     *
+     * 必须用 [EditorFactory.createEditor] 而不是 [EditorFactory.createViewer]：Qoder 在
+     * `EditorFactoryListener.editorCreated` 里用 `CosyInlayManager.isAvailable` 过滤掉
+     * `isViewer()` 的 Editor，用 viewer 会连 selection 监听都不会挂上。
+     */
+    private val shadowEditor: Editor? = document?.let {
+        // Qoder 在 editorCreated 回调里用 `PsiDocumentManager.getPsiFile(document)` 判断可用性，
+        // 此时 PSI 还没关联会被缓存成“不可用”，所以先确保 PSI 已加载。
+        runCatching { PsiManager.getInstance(project).findFile(file) }
+        EditorFactory.getInstance().createEditor(it, project, file.fileType, false)
+    }
     private val browser = JBCefBrowser()
     private val bridge = JcefHostBridge(browser, ::handleHostMessage, ::handleWebReady)
     private val panel = object : JPanel(BorderLayout()), DataProvider {
         override fun getData(dataId: String): Any? {
             return when {
+                // 焦点在 JCEF 里时，DataContext 的编辑器就是这里的影子 Editor；
+                // 例如 Qoder 的“添加上下文”动作就是从 CommonDataKeys.EDITOR 取选中内容。
+                PlatformDataKeys.EDITOR.`is`(dataId) -> shadowEditor
                 PlatformDataKeys.PREDEFINED_TEXT.`is`(dataId) -> predefinedSearchText()
                 else -> null
             }
@@ -84,6 +109,8 @@ internal class MarkTextFileEditor(
     private var structureModel: MarkdownStructureViewModel? = null
     @Volatile
     private var selectedText: String = ""
+    @Volatile
+    private var lastSyncedSelection: TextRange? = null
 
     private val documentListener = object : DocumentListener {
         override fun documentChanged(event: DocumentEvent) {
@@ -173,6 +200,7 @@ internal class MarkTextFileEditor(
         document?.removeDocumentListener(documentListener)
         Disposer.dispose(documentListenersDisposable)
         Disposer.dispose(historyShortcutsDisposable)
+        shadowEditor?.let { EditorFactory.getInstance().releaseEditor(it) }
         bridge.dispose()
         browser.dispose()
     }
@@ -219,11 +247,17 @@ internal class MarkTextFileEditor(
             "documentChanged" -> {
                 val markdown = message.get("markdown")?.asString ?: return
                 updateDocument(markdown)
+                // Muya 的输入可能只带了新的选区而没有单独的 selection-change，
+                // 文档更新后再对一次影子 Editor 的选区，保证行号不落后。
+                val text = runCatching { message.get("selectedText")?.asString }.getOrNull().orEmpty()
+                selectedText = text
+                syncShadowEditorSelection(text)
             }
             "selectionChanged" -> {
                 val text = runCatching { message.get("selectedText")?.asString }.getOrNull().orEmpty()
                 selectedText = text
                 syncPiEditorContext(text)
+                syncShadowEditorSelection(text)
             }
             "scrollPositionChanged" -> {
                 val scrollTop = message.get("scrollTop")?.asInt ?: return
@@ -369,6 +403,38 @@ internal class MarkTextFileEditor(
         }
     }
 
+    /**
+     * 把 Muya 的选区同步到影子 Editor。
+     *
+     * 同步后 [Editor] 的 SelectionModel 会广播 SelectionEvent，监听该事件的 AI 插件
+     * （如 Qoder 的“自动选中作为上下文”）就能拿到与 Muya 一致的文件、行号和选中文本。
+     */
+    private fun syncShadowEditorSelection(selectedText: String) {
+        val target = document ?: return
+        val editor = shadowEditor ?: return
+        ApplicationManager.getApplication().invokeLater {
+            if (disposed || editor.isDisposed) return@invokeLater
+
+            val range = if (selectedText.isBlank())
+                null
+            else
+                findSelectedRange(target.text, selectedText)
+            val selectionModel = editor.selectionModel
+            if (range == null) {
+                lastSyncedSelection = null
+                // 只在确实存在旧选区时清除，避免每次光标移动都广播一次事件。
+                if (selectionModel.hasSelection()) selectionModel.removeSelection()
+                return@invokeLater
+            }
+
+            if (selectionModel.selectionStart == range.startOffset && selectionModel.selectionEnd == range.endOffset) {
+                return@invokeLater
+            }
+            lastSyncedSelection = range
+            selectionModel.setSelection(range.startOffset, range.endOffset)
+        }
+    }
+
     private fun syncPiEditorContext(selectedText: String) {
         val context = buildPiEditorContext(selectedText)
         ApplicationManager.getApplication().invokeLater {
@@ -423,8 +489,10 @@ internal class MarkTextFileEditor(
     }
 
     private fun findSelectedRange(source: String, selectedText: String): TextRange? {
-        val exactStart = source.indexOf(selectedText)
-        if (exactStart >= 0) return TextRange(exactStart, exactStart + selectedText.length)
+        // 选中文本在源中多次出现时，选距离上一次同步位置最近的匹配，
+        // 否则像 `console.log` 这种高频片段会永远定位到文档开头。
+        val exact = exactMatches(source, selectedText)
+        if (exact.isNotEmpty()) return closestToLast(exact)
 
         val fragments = selectedText.lineSequence()
             .map(String::trim)
@@ -432,10 +500,35 @@ internal class MarkTextFileEditor(
             .toList()
         if (fragments.isEmpty()) return null
 
-        val first = source.indexOf(fragments.first())
-        val last = source.lastIndexOf(fragments.last())
-        if (first < 0 || last < first) return null
-        return TextRange(first, last + fragments.last().length)
+        // Muya 的跨块选中会丢掉列表前缀、块间空行，源里未必存在完整原文，
+        // 因此用首尾行作为锚点，同样取距离上次同步最近的区间。
+        val candidates = mutableListOf<TextRange>()
+        var first = source.indexOf(fragments.first())
+        while (first >= 0) {
+            val last = source.indexOf(fragments.last(), first)
+            if (last >= 0) {
+                candidates += TextRange(first, last + fragments.last().length)
+            }
+            first = source.indexOf(fragments.first(), first + 1)
+        }
+        return closestToLast(candidates)
+    }
+
+    private fun exactMatches(source: String, selectedText: String): List<TextRange> {
+        val matches = mutableListOf<TextRange>()
+        var start = source.indexOf(selectedText)
+        while (start >= 0) {
+            matches += TextRange(start, start + selectedText.length)
+            start = source.indexOf(selectedText, start + 1)
+        }
+        return matches
+    }
+
+    private fun closestToLast(candidates: List<TextRange>): TextRange? {
+        if (candidates.isEmpty()) return null
+        if (candidates.size == 1) return candidates.first()
+        val previous = lastSyncedSelection?.startOffset ?: return candidates.first()
+        return candidates.minByOrNull { abs(it.startOffset - previous) }
     }
 
     private object EmptyFileEditorState : FileEditorState {
