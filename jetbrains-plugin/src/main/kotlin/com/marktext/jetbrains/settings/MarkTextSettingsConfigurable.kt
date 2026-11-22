@@ -3,6 +3,8 @@ package com.marktext.jetbrains.settings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.options.SearchableConfigurable
+import com.intellij.openapi.ui.TextBrowseFolderListener
+import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.JBColor
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBUI
@@ -78,11 +80,12 @@ class MarkTextSettingsConfigurable : SearchableConfigurable {
                     }
                 }
                 row("Background image") {
-                    textFieldWithBrowseButton(imageDescriptor, null) { it.path }
-                        .applyToComponent {
-                            text = settings.editorBackgroundImage().orEmpty()
-                            backgroundImageField = textField
-                        }
+                    val imageField = TextFieldWithBrowseButton().apply {
+                        text = settings.editorBackgroundImage().orEmpty()
+                        addBrowseFolderListener(TextBrowseFolderListener(imageDescriptor))
+                        backgroundImageField = textField
+                    }
+                    cell(imageField)
                         .resizableColumn()
                         .comment("PNG, JPEG, GIF, WebP or BMP.")
                     button("Clear") { backgroundImageField?.text = "" }

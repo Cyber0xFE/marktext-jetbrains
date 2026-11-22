@@ -20,9 +20,9 @@ import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorLocation
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.application.ApplicationManager
@@ -66,6 +66,7 @@ internal class MarkTextFileEditor(
     }
     private val propertyChanges = PropertyChangeSupport(this)
     private val historyShortcutsDisposable = Disposer.newDisposable("marktext.history.shortcuts")
+    private val documentListenersDisposable = Disposer.newDisposable("marktext.editor.document")
     private val userData = UserDataHolderBase()
     private val settingsConnection = ApplicationManager.getApplication().messageBus.connect()
     private var applyingWebDocument = false
@@ -100,7 +101,7 @@ internal class MarkTextFileEditor(
                 }
             },
         )
-        document?.addDocumentListener(documentListener)
+        document?.addDocumentListener(documentListener, documentListenersDisposable)
         registerHistoryShortcuts()
         bridge.load(WebBundle.html(), WebBundle.baseUrl(file.path))
     }
@@ -159,6 +160,7 @@ internal class MarkTextFileEditor(
         disposed = true
         settingsConnection.dispose()
         document?.removeDocumentListener(documentListener)
+        Disposer.dispose(documentListenersDisposable)
         Disposer.dispose(historyShortcutsDisposable)
         bridge.dispose()
         browser.dispose()
@@ -299,7 +301,7 @@ internal class MarkTextFileEditor(
         // cancellable 分支并报 “There is no ProgressIndicator or Job in this thread”，必须切到 EDT。
         ApplicationManager.getApplication().invokeLater {
             if (disposed || !virtualFile.isValid) return@invokeLater
-            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+            OpenFileDescriptor(project, virtualFile).navigate(true)
         }
     }
 

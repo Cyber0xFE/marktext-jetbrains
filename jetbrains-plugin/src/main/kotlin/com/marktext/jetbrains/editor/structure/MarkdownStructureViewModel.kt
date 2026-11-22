@@ -3,7 +3,6 @@ package com.marktext.jetbrains.editor.structure
 import com.intellij.icons.AllIcons
 import com.intellij.ide.structureView.FileEditorPositionListener
 import com.intellij.ide.structureView.ModelListener
-import com.intellij.ide.structureView.StructureViewClickEvent
 import com.intellij.ide.structureView.StructureViewTreeElement
 import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.util.treeView.smartTree.Filter
@@ -14,7 +13,7 @@ import com.intellij.navigation.ItemPresentation
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
-import java.util.concurrent.CompletableFuture
+import com.intellij.openapi.util.Disposer
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.Icon
 
@@ -26,13 +25,14 @@ internal class MarkdownStructureViewModel(
     private val document: Document,
     fileName: String,
     private val onNavigate: (headingText: String) -> Unit,
-) : StructureViewModel, StructureViewModel.ClickHandler {
+) : StructureViewModel {
 
     private val root = MarkdownStructureRootElement(document, fileName, onNavigate)
     private val modelListeners = CopyOnWriteArrayList<ModelListener>()
     private val positionListeners = CopyOnWriteArrayList<FileEditorPositionListener>()
     private var currentHeadingText: String? = null
     private var currentHeadingIndex: Int = -1
+    private val documentListenersDisposable = Disposer.newDisposable("marktext.structure.document")
     private val documentListener = object : DocumentListener {
         override fun documentChanged(event: DocumentEvent) {
             fireModelUpdate()
@@ -40,7 +40,7 @@ internal class MarkdownStructureViewModel(
     }
 
     init {
-        document.addDocumentListener(documentListener)
+        document.addDocumentListener(documentListener, documentListenersDisposable)
     }
 
     override fun getRoot(): StructureViewTreeElement = root
@@ -74,22 +74,12 @@ internal class MarkdownStructureViewModel(
 
     override fun dispose() {
         document.removeDocumentListener(documentListener)
+        Disposer.dispose(documentListenersDisposable)
         modelListeners.clear()
         positionListeners.clear()
     }
 
     override fun shouldEnterElement(element: Any): Boolean = false
-
-    /**
-     * 单击 Structure 树节点即跳转到对应标题（双击则由 Navigatable.navigate 处理）。
-     */
-    override fun handleClick(event: StructureViewClickEvent): CompletableFuture<Boolean> {
-        val element = event.element
-        if (element.canNavigate()) {
-            element.navigate(false)
-        }
-        return CompletableFuture.completedFuture(true)
-    }
 
     /**
      * web 端滚动后上报当前视口顶部的标题，推动 Structure 视图选中该标题。

@@ -1,6 +1,7 @@
 package com.marktext.jetbrains.editor
 
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefBrowserBase
 import com.intellij.ui.jcef.JBCefJSQuery
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.diagnostic.Logger
@@ -16,7 +17,8 @@ internal class JcefHostBridge(
     private val messageHandler: (String) -> Unit,
     private val readyHandler: () -> Unit,
 ) {
-    private val query = JBCefJSQuery.create(browser)
+    // 显式选择稳定重载：create(JBCefBrowser) 已被标记为 scheduled for removal。
+    private val query = JBCefJSQuery.create(browser as JBCefBrowserBase)
 
     private companion object {
         val LOG = Logger.getInstance(JcefHostBridge::class.java)

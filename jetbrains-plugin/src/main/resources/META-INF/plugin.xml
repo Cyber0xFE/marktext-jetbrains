@@ -19,7 +19,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <fileEditorProvider implementation="com.marktext.jetbrains.editor.MarkTextFileEditorProvider" />
-        <applicationInitializedListener implementation="com.marktext.jetbrains.MarkTextStartupActivity" />
+        <postStartupActivity implementation="com.marktext.jetbrains.MarkTextStartupActivity" />
         <applicationConfigurable instance="com.marktext.jetbrains.settings.MarkTextSettingsConfigurable" />
     </extensions>
 </idea-plugin>
