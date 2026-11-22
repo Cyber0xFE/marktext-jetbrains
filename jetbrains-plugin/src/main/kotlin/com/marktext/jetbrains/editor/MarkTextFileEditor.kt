@@ -6,7 +6,9 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CustomShortcutSet
+import com.intellij.openapi.actionSystem.DataProvider
 import com.intellij.openapi.actionSystem.KeyboardShortcut
+import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.util.Disposer
 import com.intellij.ide.structureView.StructureViewBuilder
@@ -61,7 +63,14 @@ internal class MarkTextFileEditor(
     private val document: Document? = documentManager.getDocument(file)
     private val browser = JBCefBrowser()
     private val bridge = JcefHostBridge(browser, ::handleHostMessage, ::handleWebReady)
-    private val panel = JPanel(BorderLayout()).apply {
+    private val panel = object : JPanel(BorderLayout()), DataProvider {
+        override fun getData(dataId: String): Any? {
+            return when {
+                PlatformDataKeys.PREDEFINED_TEXT.`is`(dataId) -> predefinedSearchText()
+                else -> null
+            }
+        }
+    }.apply {
         add(browser.component, BorderLayout.CENTER)
     }
     private val propertyChanges = PropertyChangeSupport(this)
@@ -73,6 +82,8 @@ internal class MarkTextFileEditor(
     private var disposed = false
     @Volatile
     private var structureModel: MarkdownStructureViewModel? = null
+    @Volatile
+    private var selectedText: String = ""
 
     private val documentListener = object : DocumentListener {
         override fun documentChanged(event: DocumentEvent) {
@@ -210,8 +221,9 @@ internal class MarkTextFileEditor(
                 updateDocument(markdown)
             }
             "selectionChanged" -> {
-                val selectedText = message.get("selectedText")?.asString.orEmpty()
-                syncPiEditorContext(selectedText)
+                val text = runCatching { message.get("selectedText")?.asString }.getOrNull().orEmpty()
+                selectedText = text
+                syncPiEditorContext(text)
             }
             "scrollPositionChanged" -> {
                 val scrollTop = message.get("scrollTop")?.asInt ?: return
@@ -236,6 +248,20 @@ internal class MarkTextFileEditor(
                 project.getService(MarkTextNotificationService::class.java).report(detail)
             }
         }
+    }
+
+    /**
+     * 连按两下 Shift 打开 Search Everywhere 时的预填文本。
+     *
+     * 平台在 `GotoActionBase.getInitialText` 里优先读取 [PlatformDataKeys.PREDEFINED_TEXT]，
+     * 再从原生 Editor 取选中文本；JCEF 编辑器没有 IDE 原生 `Editor`，所以由宿主组件以
+     * `DataProvider` 的形式提供选中文本。
+     */
+    private fun predefinedSearchText(): String? {
+        val text = selectedText.trim()
+        // Search Everywhere 的输入框是单行文本框，跨行选择不预填（与平台对编辑器选择的处理一致）。
+        if (text.isEmpty() || text.contains('\n')) return null
+        return text
     }
 
     private fun scrollWebToHeading(headingText: String) {
