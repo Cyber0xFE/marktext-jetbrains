@@ -1,10 +1,16 @@
 <idea-plugin>
-    <id>com.marktext.jetbrains</id>
-    <name>MarkText Markdown Editor</name>
-    <vendor email="support@marktext.app" url="https://github.com/marktext/marktext">MarkText</vendor>
+    <id>com.cyber0xfe.muya.markdown</id>
+    <name>Muya Markdown Editor</name>
+    <vendor url="https://github.com/Cyber0xFE/marktext-jetbrains">Cyber0xFE</vendor>
     <description><![CDATA[
-        <p>MarkText's Muya WYSIWYG Markdown editor for IntelliJ-based IDEs.</p>
-        <p>This early build provides a JCEF-backed custom editor for Markdown files.</p>
+        <p>A WYSIWYG Markdown editor for IntelliJ-based IDEs. Markdown files open in a JCEF-hosted Muya editor instead of the plain text editor: live WYSIWYG editing and preview, Markdown outline in the structure view, image preview, optional source line numbers, remembered scroll position per file, smooth wheel scrolling, and configurable editor background color or image.</p>
+        <p>面向 JetBrains 系列 IDE 的所见即所得 Markdown 编辑器。Markdown 文件会在 JCEF 托管的 Muya 编辑器中打开，而不是纯文本编辑器：实时所见即所得编辑与预览、结构视图中的 Markdown 大纲、图片预览、可选的源码行号、按文件记住滚动位置、平滑滚轮滚动，以及可配置的编辑器背景色或背景图。</p>
+        <p>This plugin is developed on top of the open-source <a href="https://github.com/marktext/marktext">MarkText</a> project, reusing its Muya editor engine and bundling it into a JetBrains plugin.</p>
+        <p>本插件基于开源项目 <a href="https://github.com/marktext/marktext">MarkText</a> 二次开发，复用其 Muya 编辑器引擎，并打包为 JetBrains 插件。</p>
+        <h3>Acknowledgements / 致谢</h3>
+        <p>Thanks to the <a href="https://github.com/marktext/marktext">MarkText project</a> and its contributors for creating and maintaining MarkText and the Muya editor engine that this plugin builds upon. This is an independent community plugin project and is not an official MarkText project.</p>
+        <p>感谢 <a href="https://github.com/marktext/marktext">MarkText 项目</a>及其贡献者创建并持续维护 MarkText 与 Muya 编辑器引擎，本插件在此基础上构建。本项目是独立的社区插件项目，并非 MarkText 官方项目。</p>
+        <p>Project home / 项目主页: <a href="https://github.com/Cyber0xFE/marktext-jetbrains">https://github.com/Cyber0xFE/marktext-jetbrains</a></p>
     ]]></description>
 
     <idea-version since-build="253" />
