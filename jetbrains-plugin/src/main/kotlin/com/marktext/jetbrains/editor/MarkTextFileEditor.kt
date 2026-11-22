@@ -36,7 +36,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.ui.jcef.JBCefBrowser
-import com.intellij.openapi.wm.ToolWindowManager
 import com.marktext.jetbrains.settings.MarkTextScrollPositions
 import com.marktext.jetbrains.settings.MarkTextSettings
 import com.marktext.jetbrains.editor.structure.MarkdownStructureViewModel
@@ -44,7 +43,6 @@ import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.io.File
 import java.beans.PropertyChangeSupport
-import java.nio.file.Paths
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import javax.swing.JComponent
@@ -99,7 +97,7 @@ internal class MarkTextFileEditor(
         add(browser.component, BorderLayout.CENTER)
     }
     private val propertyChanges = PropertyChangeSupport(this)
-    private val historyShortcutsDisposable = Disposer.newDisposable("marktext.history.shortcuts")
+    private val componentShortcutsDisposable = Disposer.newDisposable("marktext.component.shortcuts")
     private val documentListenersDisposable = Disposer.newDisposable("marktext.editor.document")
     private val userData = UserDataHolderBase()
     private val settingsConnection = ApplicationManager.getApplication().messageBus.connect()
@@ -141,6 +139,7 @@ internal class MarkTextFileEditor(
         )
         document?.addDocumentListener(documentListener, documentListenersDisposable)
         registerHistoryShortcuts()
+        registerSearchShortcuts()
         bridge.load(WebBundle.html(), WebBundle.baseUrl(file.path))
     }
 
@@ -199,7 +198,7 @@ internal class MarkTextFileEditor(
         settingsConnection.dispose()
         document?.removeDocumentListener(documentListener)
         Disposer.dispose(documentListenersDisposable)
-        Disposer.dispose(historyShortcutsDisposable)
+        Disposer.dispose(componentShortcutsDisposable)
         shadowEditor?.let { EditorFactory.getInstance().releaseEditor(it) }
         bridge.dispose()
         browser.dispose()
@@ -215,22 +214,33 @@ internal class MarkTextFileEditor(
      */
     private fun registerHistoryShortcuts() {
         val ctrl = InputEvent.CTRL_DOWN_MASK
-        registerHistoryShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl), "undo")
-        registerHistoryShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl or InputEvent.SHIFT_DOWN_MASK), "redo")
-        registerHistoryShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Y, ctrl), "redo")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl), "undo")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl or InputEvent.SHIFT_DOWN_MASK), "redo")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_Y, ctrl), "redo")
     }
 
-    private fun registerHistoryShortcut(keyStroke: KeyStroke, action: String) {
-        val historyAction = object : DumbAwareAction() {
+    /**
+     * Ctrl+F / F3 / Shift+F3 与 IDE keymap 的 Find 系列动作冲突，必须像 undo/redo 一样
+     * 在组件级抢先注册，否则 IDE 会打开针对影子 Editor 的 Find 弹窗。
+     */
+    private fun registerSearchShortcuts() {
+        val ctrl = InputEvent.CTRL_DOWN_MASK
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F, ctrl), "openSearch")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), "findNext")
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK), "findPrevious")
+    }
+
+    private fun registerComponentShortcut(keyStroke: KeyStroke, functionName: String) {
+        val action = object : DumbAwareAction() {
             override fun actionPerformed(event: AnActionEvent) {
                 if (disposed) return
-                bridge.call("history", gson.toJson(action))
+                bridge.call(functionName, "null")
             }
         }
-        historyAction.registerCustomShortcutSet(
+        action.registerCustomShortcutSet(
             CustomShortcutSet(KeyboardShortcut(keyStroke, null)),
             browser.component,
-            historyShortcutsDisposable,
+            componentShortcutsDisposable,
         )
     }
 
@@ -256,7 +266,6 @@ internal class MarkTextFileEditor(
             "selectionChanged" -> {
                 val text = runCatching { message.get("selectedText")?.asString }.getOrNull().orEmpty()
                 selectedText = text
-                syncPiEditorContext(text)
                 syncShadowEditorSelection(text)
             }
             "scrollPositionChanged" -> {
@@ -432,59 +441,6 @@ internal class MarkTextFileEditor(
             }
             lastSyncedSelection = range
             selectionModel.setSelection(range.startOffset, range.endOffset)
-        }
-    }
-
-    private fun syncPiEditorContext(selectedText: String) {
-        val context = buildPiEditorContext(selectedText)
-        ApplicationManager.getApplication().invokeLater {
-            if (disposed) return@invokeLater
-
-            runCatching {
-                val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Pi") ?: return@runCatching
-                val panel = toolWindow.contentManager.selectedContent?.component ?: return@runCatching
-                val serviceField = generateSequence<Class<*>>(panel.javaClass) { it.superclass }
-                    .flatMap { it.declaredFields.asSequence() }
-                    .firstOrNull { it.name == "service" }
-                    ?: return@runCatching
-                if (!serviceField.trySetAccessible()) return@runCatching
-
-                val service = serviceField.get(panel) ?: return@runCatching
-                val setter = service.javaClass.methods.firstOrNull { method ->
-                    method.name == "setEditorContext"
-                        && method.parameterTypes.contentEquals(arrayOf(String::class.java))
-                } ?: return@runCatching
-                setter.invoke(service, context)
-            }.onFailure { error ->
-                LOG.debug("Pi editor context synchronization is unavailable", error)
-            }
-        }
-    }
-
-    private fun buildPiEditorContext(selectedText: String): String? {
-        val target = document ?: return null
-        val text = selectedText.trim()
-        if (text.isEmpty()) return null
-
-        val source = target.text
-        val range = findSelectedRange(source, text) ?: return null
-        val startLine = target.getLineNumber(range.startOffset)
-        val endLine = target.getLineNumber((range.endOffset - 1).coerceAtLeast(range.startOffset))
-        val path = project.basePath?.let { basePath ->
-            runCatching {
-                Paths.get(basePath).toAbsolutePath().normalize()
-                    .relativize(Paths.get(file.path).toAbsolutePath().normalize())
-                    .toString()
-                    .replace('\\', '/')
-            }.getOrNull()
-        } ?: file.path
-        val unsaved = documentManager.isDocumentUnsaved(target)
-
-        return buildString {
-            append("--- ").append(path).append(':').append(startLine + 1)
-            if (endLine != startLine) append('-').append(endLine + 1)
-            append(if (unsaved) " (buffer) ---\n" else " ---\n")
-            if (unsaved) append(target.getText(range))
         }
     }
 
