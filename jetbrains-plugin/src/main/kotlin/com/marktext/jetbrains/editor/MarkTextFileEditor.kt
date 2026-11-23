@@ -26,6 +26,8 @@ import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileEditorStateLevel
+import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.pom.Navigatable
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.diagnostic.Logger
@@ -54,7 +56,7 @@ import kotlin.math.abs
 internal class MarkTextFileEditor(
     private val project: Project,
     private val file: VirtualFile,
-) : FileEditor {
+) : TextEditor {
     private val gson = Gson()
     private companion object {
         val LOG = Logger.getInstance(MarkTextFileEditor::class.java)
@@ -184,6 +186,21 @@ internal class MarkTextFileEditor(
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {
         propertyChanges.removePropertyChangeListener(listener)
     }
+
+    /**
+     * 以 [TextEditor] 的身份暴露影子 Editor。
+     *
+     * 插件读取“当前文本编辑器”中的选中内容时走的是
+     * [com.intellij.openapi.fileEditor.FileEditorManager.getSelectedTextEditor]；
+     * 只看 [FileEditor] 时这里返回 null，例如 Pi 新建会话时 `refreshEditorContext()`
+     * 就会清空 editor context，已选中的代码随之丢失。
+     */
+    override fun getEditor(): Editor = shadowEditor ?: error("Muya Markdown Editor has no document: ${file.path}")
+
+    // 导航由 Muya 的标题跳转负责，这里不支持按 offset 跳转。
+    override fun canNavigateTo(navigatable: Navigatable): Boolean = false
+
+    override fun navigateTo(navigatable: Navigatable) = Unit
 
     override fun getCurrentLocation(): FileEditorLocation? = null
 
