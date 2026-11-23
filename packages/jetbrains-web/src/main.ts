@@ -20,6 +20,7 @@ import {
   en
 } from '@muyajs/core'
 
+import { gotoSourceLine } from './gotoLine'
 import { ImagePreview } from './imagePreview'
 import { installLineNumbers, type LineNumberController } from './lineNumbers'
 import { installSearchBridge, type SearchBridge } from './search'
@@ -74,6 +75,7 @@ interface HostWindow extends Window {
     setShowLineNumbers: (show: boolean) => void
     setEditorBackground: (background: { color?: string | null; imageUrl?: string | null }) => void
     scrollToHeading: (text: string) => void
+    gotoLine: (line: number) => void
     history: (action: 'undo' | 'redo') => void
     search: (request: { query?: string; caseSensitive?: boolean; wholeWord?: boolean; regexp?: boolean }) => void
     findNext: () => void
@@ -450,6 +452,12 @@ function start(): void {
     setShowLineNumbers: (show) => lineNumbers?.setVisible(show),
     setEditorBackground: (background) => setEditorBackground(background.color, background.imageUrl),
     scrollToHeading,
+    gotoLine: (line) => {
+      if (!editor) return
+      // 光标按行重排过一次内容（`setCursorByOffset` 会重建 DOM），行号标签随之丢失，需要重画。
+      if (gotoSourceLine(editor, line)) lineNumbers?.refresh(editor.getMarkdown(), editor.options)
+      editor.focus()
+    },
     history: (action: 'undo' | 'redo') => {
       if (action === 'redo') editor?.redo()
       else if (action === 'undo') editor?.undo()

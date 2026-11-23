@@ -73,6 +73,17 @@ export function blockStartLines(markdown: string, options: IMuyaOptions): number
 }
 
 /**
+ * 收集 `.mu-container` 的直接子块，即渲染视图里的顶层块。
+ *
+ * 顶层块与 markdown 的顶层 token 一一对应，行号与「跳转到行」都依赖这个顺序。
+ */
+export function topLevelBlocks(domNode: HTMLElement): HTMLElement[] {
+  const root = domNode.querySelector<HTMLElement>('.mu-container')
+  if (!root) return []
+  return Array.from(root.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
+}
+
+/**
  * 在编辑器左侧渲染 markdown 源码行号。
  *
  * 行号以绝对定位的 span 插入每个顶层块，随块一起滚动，不需要在滚动时重算位置。
@@ -85,17 +96,11 @@ export function installLineNumbers(domNode: HTMLElement): LineNumberController {
 
   const container = (): HTMLElement | null => domNode.querySelector<HTMLElement>('.mu-container')
 
-  const topLevelBlocks = (): HTMLElement[] => {
-    const root = container()
-    if (!root) return []
-    return Array.from(root.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
-  }
-
   const clear = (): void => {
     const root = container()
     if (!root) return
     root.querySelectorAll<HTMLElement>(`:scope > .${LABEL_CLASS}`).forEach((label) => label.remove())
-    topLevelBlocks().forEach((block) => {
+    topLevelBlocks(domNode).forEach((block) => {
       block.classList.remove(BLOCK_CLASS)
       block.querySelectorAll<HTMLElement>(`:scope > .${LABEL_CLASS}`).forEach((label) => label.remove())
     })
@@ -105,7 +110,7 @@ export function installLineNumbers(domNode: HTMLElement): LineNumberController {
     clear()
     if (!visible || !options || markdown === '') return
 
-    const blocks = topLevelBlocks()
+    const blocks = topLevelBlocks(domNode)
     if (blocks.length === 0) return
 
     const starts = blockStartLines(markdown, options)

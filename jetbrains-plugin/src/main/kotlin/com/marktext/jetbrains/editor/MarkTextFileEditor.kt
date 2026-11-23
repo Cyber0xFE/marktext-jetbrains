@@ -147,6 +147,7 @@ internal class MarkTextFileEditor(
         document?.addDocumentListener(documentListener, documentListenersDisposable)
         registerHistoryShortcuts()
         registerSearchShortcuts()
+        registerGotoLineShortcut()
         bridge.load(WebBundle.html(), WebBundle.baseUrl(file.path))
     }
 
@@ -264,6 +265,27 @@ internal class MarkTextFileEditor(
             browser.component,
             componentShortcutsDisposable,
         )
+    }
+
+    /**
+     * Ctrl+G 与 IDE keymap 的 Goto Line 动作冲突：平台的实现会对无 UI 的影子 Editor 跳转，
+     * 用户看不到任何变化。这里同样在组件级抢注，弹出行号对话框后交给 Muya 定位。
+     */
+    private fun registerGotoLineShortcut() {
+        registerComponentShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK)) {
+            openGotoLine()
+        }
+    }
+
+    /** 行号范围以 IDE 文档为准（Muya 渲染的 markdown 与之完全一致）。 */
+    private fun openGotoLine() {
+        val target = document ?: return
+        val lineCount = target.lineCount
+        if (lineCount <= 0) return
+        val dialog = MarkTextGotoLineDialog(project, lineCount)
+        if (!dialog.showAndGet()) return
+        val line = dialog.lineNumber ?: return
+        bridge.call("gotoLine", gson.toJson(line))
     }
 
     /**
