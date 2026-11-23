@@ -47,6 +47,18 @@ export function installSearchBridge(
     ...(typeof highlightIndex === 'number' ? { highlightIndex } : {})
   })
 
+  /**
+   * 把视口滚到当前匹配。
+   *
+   * Muya 只渲染高亮、不负责滚动：搜索命中的 active 项带 `mu-highlight` 类
+   * （其余匹配是 `mu-selection`），据此定位到视口中央。
+   */
+  const revealActiveMatch = (): void => {
+    const active = editor.domNode.querySelector<HTMLElement>('span.mu-highlight')
+    if (!active?.isConnected) return
+    active.scrollIntoView({ block: 'center', inline: 'nearest' })
+  }
+
   const reportResult = (result: Search): void => {
     matchCount = result.matches.length
     activeIndex = result.index
@@ -62,6 +74,7 @@ export function installSearchBridge(
       return
     }
     reportResult(editor.search(query, searchOptions()))
+    revealActiveMatch()
   }
 
   const search = (request: SearchRequest): void => {
@@ -79,6 +92,7 @@ export function installSearchBridge(
     const from = activeIndex >= 0 ? activeIndex : 0
     const target = (from + delta + matchCount) % matchCount
     reportResult(editor.search(query, searchOptions(target)))
+    revealActiveMatch()
   }
 
   const findNext = (): void => step(1)
