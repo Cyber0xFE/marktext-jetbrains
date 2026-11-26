@@ -7,9 +7,10 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.find.FindModel
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CustomShortcutSet
-import com.intellij.openapi.actionSystem.DataProvider
+import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.actionSystem.PlatformDataKeys
+import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.util.Disposer
 import com.intellij.ide.structureView.StructureViewBuilder
@@ -86,15 +87,12 @@ internal class MarkTextFileEditor(
     }
     private val browser = JBCefBrowser()
     private val bridge = JcefHostBridge(browser, ::handleHostMessage, ::handleWebReady)
-    private val panel = object : JPanel(BorderLayout()), DataProvider {
-        override fun getData(dataId: String): Any? {
-            return when {
-                // 焦点在 JCEF 里时，DataContext 的编辑器就是这里的影子 Editor；
-                // 例如 Qoder 的“添加上下文”动作就是从 CommonDataKeys.EDITOR 取选中内容。
-                PlatformDataKeys.EDITOR.`is`(dataId) -> shadowEditor
-                PlatformDataKeys.PREDEFINED_TEXT.`is`(dataId) -> predefinedSearchText()
-                else -> null
-            }
+    private val panel = object : JPanel(BorderLayout()), UiDataProvider {
+        override fun uiDataSnapshot(sink: DataSink) {
+            // 焦点在 JCEF 里时，DataContext 的编辑器就是这里的影子 Editor；
+            // 例如 Qoder 的“添加上下文”动作就是从 CommonDataKeys.EDITOR 取选中内容。
+            shadowEditor?.let { sink.set(PlatformDataKeys.EDITOR, it) }
+            predefinedSearchText()?.let { sink.set(PlatformDataKeys.PREDEFINED_TEXT, it) }
         }
     }.apply {
         add(browser.component, BorderLayout.CENTER)
@@ -423,7 +421,7 @@ internal class MarkTextFileEditor(
      *
      * 平台在 `GotoActionBase.getInitialText` 里优先读取 [PlatformDataKeys.PREDEFINED_TEXT]，
      * 再从原生 Editor 取选中文本；JCEF 编辑器没有 IDE 原生 `Editor`，所以由宿主组件以
-     * `DataProvider` 的形式提供选中文本。
+     * [UiDataProvider] 的数据快照提供选中文本。
      */
     private fun predefinedSearchText(): String? {
         val text = selectedText.trim()

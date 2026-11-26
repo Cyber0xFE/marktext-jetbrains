@@ -13,6 +13,18 @@
         <p>Project home / 项目主页: <a href="https://github.com/Cyber0xFE/marktext-jetbrains">https://github.com/Cyber0xFE/marktext-jetbrains</a></p>
     ]]></description>
 
+    <change-notes><![CDATA[
+        <h3>0.1.1</h3>
+        <ul>
+            <li>Selection sync: Muya selections are mirrored into a shadow editor's SelectionModel and exposed as a TextEditor, so AI assistant plugins that rely on IDE selections and Search Everywhere can read the selected text.<br/>选中文本同步：Muya 选区写入影子 Editor 的 SelectionModel，编辑器同时以 TextEditor 身份暴露，Qoder、Pi 等依赖 IDE 选区的 AI 插件与 Search Everywhere 可读取选中文本（跨行选中不预填）。</li>
+            <li>Ctrl+F now uses the IDE's native find bar with match count, case / whole-word / regex filters, F3 and Shift+F3 navigation, and scrolls the current match into view.<br/>Ctrl+F 改用 IDE 内置查找栏：复用平台的 SearchReplaceComponent，保留命中计数、大小写/全词/正则过滤与 F3 / Shift+F3 导航，当前命中项自动滚动到视口中央。</li>
+            <li>Ctrl+G jumps to a Markdown source line, with validation against the document line count.<br/>Ctrl+G 按 Markdown 源码行号跳转，行号范围与文档行数一致，越界时提示合法范围。</li>
+            <li>Removed the reflection-based private hook into the Pi plugin; the selection context now flows through the standard SelectionEvent path.<br/>移除对 Pi 插件私有接口的反射调用，改由标准 SelectionEvent 通路获取选中上下文。</li>
+        </ul>
+        <h3>0.1.0</h3>
+        <p>First stable release with Muya WYSIWYG editing, Markdown structure view, image preview, source line numbers, per-file scroll position memory, and configurable editor background.<br/>首个正式版本：Muya 所见即所得编辑、Markdown 结构视图、图片预览、源码行号、按文件记忆滚动位置、可配置背景色/背景图。</p>
+    ]]></change-notes>
+
     <idea-version since-build="253" />
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.jcef</depends>

@@ -7,8 +7,6 @@ import com.intellij.find.editorHeaderActions.ToggleMatchCase
 import com.intellij.find.editorHeaderActions.ToggleRegex
 import com.intellij.find.editorHeaderActions.ToggleWholeWordsOnlyAction
 import com.intellij.find.EditorSearchSession
-import com.intellij.openapi.actionSystem.DataSink
-import com.intellij.openapi.actionSystem.UiCompatibleDataProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.application.ApplicationManager
 import javax.swing.JComponent
@@ -32,7 +30,7 @@ internal class MarkTextFindSession(
     private val onSearch: (FindModel) -> Unit,
     private val onNavigate: (forward: Boolean) -> Unit,
     private val onClose: () -> Unit,
-) : SearchSession, UiCompatibleDataProvider, SearchReplaceComponent.Listener {
+) : SearchSession, SearchReplaceComponent.Listener {
 
     /** 查找条件；界面选项按钮直接修改它。 */
     val model = FindModel()
@@ -112,10 +110,6 @@ internal class MarkTextFindSession(
     override fun searchBackward() = onNavigate(false)
 
     override fun close() = onClose()
-
-    override fun uiDataSnapshot(sink: DataSink) {
-        sink.set(SearchSession.KEY, this)
-    }
 
     /** 查找栏输入框内容变化（实时搜索）。 */
     override fun searchFieldDocumentChanged() {
